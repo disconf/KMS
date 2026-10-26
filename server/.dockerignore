@@ -1,10 +1,13 @@
 # 构建上下文裁剪：这些目录只在本机有意义，
 # 进了 context 会让每次 docker build 白传几百 MB。
-bin/
-dist/
-data/
-.dev-run/
-.smoke-run/
+# 注意必须锚定到仓库根（/data/ 这种写法），否则会把
+# internal/bootstrap/data/（go:embed 的教程正文）一起排除，
+# 编译时直接 no matching files found。
+/bin/
+/dist/
+/data/
+/.dev-run/
+/.smoke-run/
 *.log
 *.db
 *.db-shm
