@@ -3,6 +3,10 @@
 ARG GO_IMAGE=golang:1.26-alpine
 FROM ${GO_IMAGE} AS builder
 
+# 国内服务器访问 proxy.golang.org 超时，goproxy.cn 在境内外都可用；
+# 模块校验和仍由 go.sum 把关，镜像源只影响下载通道，不影响完整性。
+ENV GOPROXY=https://goproxy.cn,direct
+
 WORKDIR /src
 
 # 先只拷依赖清单，利用层缓存避免每次改代码都重新下载依赖。
