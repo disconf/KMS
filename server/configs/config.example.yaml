@@ -1,0 +1,127 @@
+# 运维专家服务平台 - 后端配置示例
+# 用法：cp configs/config.example.yaml configs/config.yaml 后按需修改
+# 所有字段都可以被同名环境变量覆盖，环境变量名见 README。
+
+app:
+  name: ops-expert-platform
+  env: dev                  # dev | test | prod
+  addr: ":8080"
+  base_url: "http://localhost:8080"
+  frontend_url: "http://localhost:3000"
+  read_timeout: 15s
+  write_timeout: 30s
+  shutdown_timeout: 10s
+  # 是否对外暴露 /docs 与 /openapi.yaml；不配置时 prod 关闭、其它环境开放
+  expose_docs: true
+
+log:
+  level: info               # debug | info | warn | error
+  format: text              # text | json（生产建议 json）
+  add_source: false
+
+database:
+  driver: sqlite            # sqlite | mysql
+  # driver=sqlite 时使用（零依赖本地开发，开箱即跑）
+  sqlite_path: "./data/ops_expert.db"
+  # driver=mysql 时使用
+  dsn: "root:root@tcp(127.0.0.1:3306)/ops_expert?charset=utf8mb4&parseTime=True&loc=Local"
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime: 1h
+  auto_migrate: true
+  log_level: warn           # silent | error | warn | info
+
+redis:
+  # 留空则自动降级为进程内内存缓存（仅适合单机开发，重启即失效）
+  addr: ""
+  password: ""
+  db: 0
+  pool_size: 20
+  dial_timeout: 3s
+
+jwt:
+  # 生产环境必须替换，且长度不少于 32 字节。可通过 JWT_SECRET 环境变量注入。
+  secret: "dev-only-secret-change-me-0123456789abcdef"
+  issuer: ops-expert-platform
+  access_ttl: 2h
+  refresh_ttl: 168h
+
+sms:
+  provider: mock            # mock | aliyun | tencent
+  code_ttl: 5m              # 验证码有效期
+  send_interval: 60s        # 同一手机号发送间隔
+  hourly_limit: 5           # 同一手机号每小时上限
+  daily_limit: 20           # 同一手机号每天上限
+  # 仅 dev/test 允许为 true：把验证码直接回给前端，省掉真实短信通道
+  expose_code: true
+  aliyun:
+    access_key_id: ""
+    access_key_secret: ""
+    sign_name: ""
+    template_code: ""
+  tencent:
+    secret_id: ""
+    secret_key: ""
+    sdk_app_id: ""
+    sign_name: ""
+    template_id: ""
+
+wechat:
+  app_id: ""
+  app_secret: ""
+  redirect_uri: "http://localhost:3000/auth/wechat/callback"
+  # true 时可用 "mock:<openid>" 形式的 code 直接登录，方便前后端联调
+  mock: true
+
+payment:
+  # mock    ：下单即支付成功，仅供本地联调（生产环境启动时会被硬拦）
+  # offline ：线下转账，后台人工确认收款
+  # wechat / alipay：保留骨架，未接通前调用会返回「暂未开通」而不是假装成功
+  provider: "mock"
+  # 待支付订单的有效期，超时由定时任务自动取消，释放专家的接单名额
+  pay_timeout: 15m
+  # 服务完成后多久自动确认。没有这个兜底，用户忘了点确认的订单会永远卡在
+  # 待确认，专家干了活却拿不到钱——比"误判完成"更严重。
+  auto_confirm_after: 48h
+  # 平台抽佣基点，1500 = 15%。用基点而不是百分比浮点：抽佣要参与金额计算，
+  # 一分钱的误差在对账时都要人工核。
+  commission_rate_bp: 1500
+  # 支付结果回调地址，真实通道需要
+  notify_url: ""
+
+scheduler:
+  # 是否在本进程里跑定时任务。
+  # 三个任务（支付超时关单 / 自动确认 / 结算兜底）都是幂等的，多副本同时跑也安全；
+  # 但真要扩到多副本，更干净的做法是只在其中一份上开，或拆成独立进程——
+  # 否则每个副本都在扫同一批数据，日志里的处理条数会看起来"翻了几倍"。
+  enabled: true
+  # 扫描周期。超范围（<1s 或 >24h）会**直接启动失败**，不会静默改成默认值：
+  # 把 30s 写成 30m 不违反任何下限，超时单只会在库里多躺半小时，从外部完全看不出来。
+  interval: 1m
+  # 单轮每个任务处理的上限。积压很多时宁可多跑几轮，也不要一次拿几千条进事务。
+  batch_size: 100
+  # 单个任务的执行超时。超时即放弃这一轮，不阻塞下一位。
+  job_timeout: 30s
+  # 启动时立刻先跑一轮，不等第一个周期：进程重启后积压的单子不用再等一个完整周期。
+  # 也让运维在启动日志里立刻看到"任务确实跑起来了"。
+  run_on_start: true
+
+cors:
+  allow_origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+  allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+  allow_headers: ["Origin", "Content-Type", "Authorization", "X-Request-Id"]
+  expose_headers: ["X-Request-Id"]
+  allow_credentials: true
+  max_age: 12h
+
+web:
+  # 是否由本服务托管知识库前端页面。
+  # 前后端分离部署（前端走 CDN 或独立 Nginx）时置为 false，
+  # 此时根路径只返回一段服务信息 JSON，不再返回页面。
+  enabled: true
+  # 前端资源的磁盘目录。留空时使用编译期内嵌的副本——这是生产默认值，
+  # 二进制自包含才不会出现"页面没跟着一起发"的部署事故。
+  # 本地开发建议指向源码目录，改完页面刷新即可生效，不必重新编译。
+  dir: ""

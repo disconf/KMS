@@ -1,0 +1,21 @@
+# 构建缓存与本地工作台数据（记忆、会话、缓存不入公共仓库）
+.workbuddy/
+
+# 运行期产生的本地数据库与日志
+server/data/
+*.log
+
+# 本地构建产物与冒烟运行目录
+server/bin/
+server/dist/
+.smoke-run/
+server/.smoke-run/
+server/.dev-run/
+
+# 生产部署的密钥与渲染后的配置（bootstrap.sh 生成）
+deploy/prod/.env
+deploy/prod/config.yaml
+
+# 编辑器与系统文件
+.DS_Store
+Thumbs.db

@@ -1,0 +1,147 @@
+# 生产部署：Docker Compose 单机编排
+#
+# 目录结构（服务器上 /opt/kms/deploy/prod）：
+#   docker-compose.yml   本文件
+#   .env                 密钥与口令（bootstrap.sh 首次生成，不进 git）
+#   config.yaml          应用配置（bootstrap.sh 从模板渲染，不进 git）
+#   config.template.yaml 配置模板
+#   nginx/conf.d/kms.conf 反代配置（80 转 443 + TLS）
+#
+# 用法见同目录 README.md。所有服务走内部网络，只有 nginx 暴露 80/443。
+
+name: kms
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: kms-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kms}
+      MYSQL_USER: kms
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD:?请在 .env 中设置 MYSQL_APP_PASSWORD}
+      TZ: Asia/Shanghai
+    # 2GB 内存的机器：缓冲池与连接数按"够用"配，宁可查询慢一点
+    # 也不能让 OOM killer 杀库。performance_schema 常驻上百 MB，直接关。
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      - --innodb-buffer-pool-size=256M
+      - --max-connections=150
+      - --performance-schema=OFF
+      - --slow-query-log=ON
+      - --long-query-time=1
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    container_name: kms-redis
+    restart: unless-stopped
+    # 缓存都是可重建数据（登录态、限流计数、热搜），
+    # 内存吃紧时优先淘汰，而不是把整个 Redis 拖垮。
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: kms/api:${KMS_VERSION:-latest}
+    build:
+      context: ../../server
+      dockerfile: deploy/Dockerfile
+      args:
+        VERSION: ${KMS_VERSION:-latest}
+    container_name: kms-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: prod
+      APP_ADDR: ":8080"
+      APP_BASE_URL: https://${APP_DOMAIN:-www.jinzhiqiang.com}
+      APP_FRONTEND_URL: https://${APP_DOMAIN:-www.jinzhiqiang.com}
+      DB_DRIVER: mysql
+      DB_DSN: kms:${MYSQL_APP_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-kms}?charset=utf8mb4&parseTime=True&loc=Local
+      REDIS_ADDR: redis:6379
+    volumes:
+      - ./config.yaml:/app/configs/config.yaml:ro
+      - app-data:/app/data
+    networks: [internal]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # 一次性初始化：建表 + 写种子（栏目、文章、工具、题库、教程集、管理员）。
+  # 平时不启动，只在 bootstrap.sh 里 docker compose run --rm init 调用。
+  # APP_ENV 覆盖成 test 是刻意的：prod 会跳过种子，而内容初始化必须跑；
+  # 种子幂等，重复执行结果一致。跑完后由 init-db 进程自行退出。
+  init:
+    image: kms/api:${KMS_VERSION:-latest}
+    build:
+      context: ../../server
+      dockerfile: deploy/Dockerfile
+      args:
+        VERSION: ${KMS_VERSION:-latest}
+    container_name: kms-init
+    profiles: [init]
+    env_file: .env
+    environment:
+      APP_ENV: test
+      APP_ADDR: ":8080"
+      APP_BASE_URL: https://${APP_DOMAIN:-www.jinzhiqiang.com}
+      DB_DRIVER: mysql
+      DB_DSN: kms:${MYSQL_APP_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-kms}?charset=utf8mb4&parseTime=True&loc=Local
+      REDIS_ADDR: redis:6379
+    command: ["-config", "/app/configs/config.yaml", "-init-db"]
+    volumes:
+      - ./config.yaml:/app/configs/config.yaml:ro
+      - app-data:/app/data
+    networks: [internal]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: kms-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # 证书留在宿主机 /etc/nginx/ssl（续期只动宿主机文件，容器重启即生效）
+      - /etc/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-cache:/var/cache/nginx
+    networks: [internal]
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  redis-data:
+  app-data:
+  nginx-cache:

@@ -1,0 +1,51 @@
+# -*- coding: utf-8 -*-
+"""Windows Server 方向·第三批（补齐题量：打印/授权/运维节奏）。"""
+CAT = "windows-server"
+
+HAND = [
+    ("Windows 服务器占用 CPU 很高但任务管理器看不出是哪个进程，下一步该怎么做？",
+     ["直接重启服务器", "用资源监视器/Process Explorer 展开到线程与句柄层级定位",
+      "把杀毒软件关掉", "增加 CPU 核数"],
+     [1],
+     "任务管理器只到进程粒度，svchost 与驱动占用要下钻到线程/句柄（Process Explorer、Get-Counter）才能定位。",
+     "medium", ["排障", "性能"]),
+]
+
+FACTS = [
+    {"kind": "cmd", "topic": "打印服务", "name": "Get-Printer", "desc": "列出打印机与端口", "detail": "打印故障第一站"},
+    {"kind": "cmd", "topic": "打印服务", "name": "Get-PrintJob", "desc": "查看打印队列", "detail": "卡住的任务要清理"},
+    {"kind": "cmd", "topic": "打印服务", "name": "Remove-PrintJob", "desc": "删除卡住的打印任务", "detail": "清队列后再重启 spooler"},
+    {"kind": "cmd", "topic": "打印服务", "name": "Restart-Service spooler", "desc": "重启打印后台服务", "detail": "打印全站异常的首选动作"},
+    {"kind": "cmd", "topic": "打印服务", "name": "printmanagement.msc", "desc": "打印管理控制台", "detail": "驱动与端口集中管理"},
+    {"kind": "cmd", "topic": "授权", "name": "Get-RDUserSession", "desc": "查看 RDS 会话", "detail": "会话主机排障"},
+    {"kind": "cmd", "topic": "授权", "name": "Get-RDLicenseConfiguration", "desc": "查看 RDS 授权配置", "detail": "授权过期会导致无法登录"},
+    {"kind": "cmd", "topic": "授权", "name": "slmgr /dlv", "desc": "查看 Windows 激活与授权详情", "detail": "到期与 KMS 状态"},
+    {"kind": "cmd", "topic": "授权", "name": "slmgr /ato", "desc": "触发激活", "detail": "KMS 环境排查"},
+    {"kind": "cmd", "topic": "运维节奏", "name": "Get-WinEvent -ListLog * -MaxEvents 1", "desc": "统计各日志通道大小", "detail": "找出暴涨的日志"},
+    {"kind": "cmd", "topic": "运维节奏", "name": "Get-ComputerInfo", "desc": "一次性拉取系统全貌", "detail": "资产盘点脚本常用"},
+    {"kind": "cmd", "topic": "运维节奏", "name": "Get-CimInstance Win32_Product", "desc": "列出已安装软件", "detail": "会触发 MSI 重配置，慎在大规模使用"},
+    {"kind": "cmd", "topic": "运维节奏", "name": "Get-Package / winget list", "desc": "查看已安装包", "detail": "比 Win32_Product 安全"},
+    {"kind": "cmd", "topic": "运维节奏", "name": "Get-Service | Where StartType -eq Automatic", "desc": "列出所有自启服务", "detail": "开机慢与攻击面盘点"},
+    {"kind": "flag", "topic": "PowerShell", "name": "Get-WinEvent", "flag": "-Oldest", "meaning": "从最早的事件开始取，还原时间线用"},
+    {"kind": "flag", "topic": "PowerShell", "name": "Out-File", "flag": "-Encoding utf8", "meaning": "显式指定编码，避免中文乱码（PS5 与 PS7 默认不同）"},
+    {"kind": "symptom", "topic": "打印", "symptom": "打印任务一直显示「正在打印」但打印机无反应",
+     "cause": "打印队列卡死或后台处理服务异常",
+     "action": "清空队列、重启 spooler、核对端口与驱动版本",
+     "analysis": "打印问题九成在队列与后台服务，先清队列再看驱动"},
+    {"kind": "symptom", "topic": "授权", "symptom": "远程桌面无法登录，提示没有可用的远程桌面授权服务器",
+     "cause": "RDS 授权模式配置错误或宽限期已过",
+     "action": "核对授权模式与授权服务器指向，检查许可证是否过期",
+     "analysis": "RDS 有 120 天宽限期，过期后必须正确指向授权服务器"},
+    {"kind": "config", "topic": "运维节奏", "name": "补丁灰度批次划分", "where": "运维流程",
+     "meaning": "先测试组→非核心→核心，每批观察后再推进"},
+    {"kind": "config", "topic": "运维节奏", "name": "变更记录与回滚点", "where": "运维流程",
+     "meaning": "每次变更前记录快照/备份与回滚步骤"},
+    {"kind": "concept", "topic": "运维节奏", "truth": True,
+     "statement": "Windows 服务器的重启窗口需要与业务方约定，不能按系统提示随时重启",
+     "wrong": "系统提示需要重启就应当立即重启",
+     "analysis": "自动重启会中断业务，必须纳入维护窗口管理"},
+    {"kind": "concept", "topic": "运维节奏", "truth": False,
+     "statement": "资产清单可以靠人工表格维护，不需要自动采集",
+     "wrong": "手工表格足以支撑补丁与合规管理",
+     "analysis": "手工清单必然失真，补丁与基线覆盖率都建立在准确资产之上"},
+]

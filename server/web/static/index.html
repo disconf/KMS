@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>个人工作经验分享</title>
+<meta name="description" content="个人运维与开发经验分享：Linux 实战教程、运维题库、运维资讯、开源工具推荐与资源下载" />
+<meta name="color-scheme" content="light" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231E5EFF'/><path d='M9 11l5 5-5 5' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'/><path d='M17.5 21h6' stroke='white' stroke-width='2.8' stroke-linecap='round'/></svg>" />
+<link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+
+<!-- 顶栏：品牌 + 栏目导航 + 搜索 + 账号。滚动时保持吸顶。 -->
+<header class="topbar" id="topbar">
+  <div class="topbar-inner">
+
+    <a class="brand" href="#/" aria-label="个人工作经验分享首页">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="30" height="30"><rect width="32" height="32" rx="8" fill="#1E5EFF"/><path d="M9 11l5 5-5 5" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 21h6" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/></svg>
+      </span>
+      <span class="brand-text">
+        <strong>个人工作经验分享</strong>
+        <small>WORK NOTES</small>
+      </span>
+    </a>
+
+    <nav class="nav" id="nav" aria-label="栏目导航">
+      <span class="nav-skeleton"></span>
+      <span class="nav-skeleton"></span>
+      <span class="nav-skeleton"></span>
+      <span class="nav-skeleton"></span>
+    </nav>
+
+    <div class="topbar-right">
+      <form class="search" id="search-form" role="search">
+        <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+        <input id="search-input" type="search" placeholder="搜索教程、工具、题目…" autocomplete="off"
+               role="combobox" aria-expanded="false" aria-controls="search-suggest" aria-autocomplete="list" />
+        <div class="search-suggest" id="search-suggest" role="listbox" aria-label="搜索建议" hidden></div>
+      </form>
+
+      <button class="icon-btn search-toggle" id="search-toggle" type="button"
+              aria-label="搜索" aria-expanded="false" aria-controls="search-form">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+      </button>
+
+      <span class="topbar-sep" aria-hidden="true"></span>
+      <div class="account" id="account"></div>
+    </div>
+
+  </div>
+</header>
+
+<main class="content" id="view" tabindex="-1">
+  <div class="page-loading">
+    <span class="spinner" aria-hidden="true"></span>
+    <p>正在加载…</p>
+  </div>
+</main>
+
+<footer class="site-foot">
+  <div class="foot-inner">
+    <span>© 2026 个人工作经验分享</span>
+    <span class="foot-sep" aria-hidden="true">/</span>
+    <a class="foot-icp" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">京ICP备2026051452号</a>
+    <span class="foot-sep" aria-hidden="true">/</span>
+    <a href="#/experts">专家广场</a>
+    <span class="foot-sep" aria-hidden="true">/</span>
+    <a href="#/expert/apply">入驻成为专家</a>
+    <span class="foot-sep" aria-hidden="true">/</span>
+    <a href="/docs" target="_blank" rel="noopener" data-doc-link>API 文档</a>
+    <span class="foot-sep" aria-hidden="true">/</span>
+    <a href="/openapi.yaml" target="_blank" rel="noopener" data-doc-link>OpenAPI</a>
+    <span class="foot-note">内容持续更新，欢迎投稿排障记录</span>
+  </div>
+</footer>
+
+<div id="modal-root"></div>
+<div id="toast-root" class="toast-root" role="status" aria-live="polite"></div>
+
+<script type="module" src="/assets/js/app.js"></script>
+</body>
+</html>

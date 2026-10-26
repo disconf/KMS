@@ -1,0 +1,74 @@
+# 运维专家服务平台 · 本地依赖编排
+#
+# 用法：
+#   docker compose -f deploy/docker-compose.yml up -d
+#
+# 起来之后把 server/.env 或 configs/config.yaml 改成 MySQL + Redis：
+#   DB_DRIVER=mysql
+#   DB_DSN=root:root@tcp(127.0.0.1:3306)/ops_expert?charset=utf8mb4&parseTime=True&loc=Local
+#   REDIS_ADDR=127.0.0.1:6379
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ops-expert-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ops_expert
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      - --max_connections=300
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: ops-expert-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # 后端服务。默认注释掉，本地开发建议直接 go run，改完即生效。
+  # api:
+  #   build:
+  #     context: ..
+  #     dockerfile: deploy/Dockerfile
+  #   container_name: ops-expert-api
+  #   restart: unless-stopped
+  #   environment:
+  #     APP_ENV: dev
+  #     DB_DRIVER: mysql
+  #     DB_DSN: root:root@tcp(mysql:3306)/ops_expert?charset=utf8mb4&parseTime=True&loc=Local
+  #     REDIS_ADDR: redis:6379
+  #     JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-0123456789abcdef}
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+
+volumes:
+  mysql-data:
+  redis-data:

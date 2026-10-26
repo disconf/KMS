@@ -1,0 +1,117 @@
+# 运维专家服务平台 - 服务器部署配置模板
+#
+# 这份模板由 deploy/install.sh 在服务器上渲染成 /opt/ops-expert/configs/config.yaml，
+# 占位符 __XXX__ 会被替换。**配置只在首次安装时生成**，之后再跑 install.sh 不会覆盖，
+# 线上手改过的值不会丢。
+#
+# 与 configs/config.example.yaml 的差异（都是"部署到服务器"才需要关心的）：
+#   - app.env 决定红线：prod 会拒绝 mock 短信、mock 支付、expose_code、默认 JWT 密钥
+#   - web.dir 留空：用二进制里内嵌的静态站点，部署物只要一个可执行文件
+#   - 路径一律绝对路径：systemd 下工作目录是 /opt/ops-expert，相对路径能跑，
+#     但出问题时光看日志分不清是哪个库，绝对路径省一次排查
+
+app:
+  name: ops-expert-platform
+  env: __ENV__                     # dev | test | prod
+  addr: ":__PORT__"
+  base_url: "__BASE_URL__"
+  frontend_url: "__BASE_URL__"
+  read_timeout: 15s
+  write_timeout: 30s
+  shutdown_timeout: 10s
+  # 是否对外暴露 /docs 与 /openapi.yaml。
+  # prod 不配置时默认关闭；要临时给合作方看接口，改成 true 后重启即可。
+  expose_docs: false
+
+log:
+  level: info
+  format: text                     # journalctl 里直接可读；接 ELK 时改 json
+  add_source: false
+
+database:
+  driver: __DB_DRIVER__            # sqlite | mysql
+  sqlite_path: "/opt/ops-expert/data/ops_expert.db"
+  dsn: "__MYSQL_DSN__"
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime: 1h
+  auto_migrate: true               # 当前仍是开发期迁移；换 golang-migrate 后置 false
+  log_level: warn
+
+redis:
+  # 留空 = 进程内缓存。单实例够用，但重启会踢掉所有登录态、限流计数清零。
+  # 上多实例或要求重启不掉登录时必须在这里填真实 Redis。
+  addr: "__REDIS_ADDR__"
+  password: ""
+  db: 0
+  pool_size: 20
+  dial_timeout: 3s
+
+jwt:
+  secret: "__JWT_SECRET__"         # install.sh 用 openssl rand -hex 32 生成
+  issuer: ops-expert-platform
+  access_ttl: 2h
+  refresh_ttl: 168h
+
+sms:
+  provider: __SMS_PROVIDER__       # mock | aliyun | tencent | webhook
+  code_ttl: 5m
+  send_interval: 60s
+  hourly_limit: 5
+  daily_limit: 20
+  # mock 通道下把验证码回给前端。prod 环境启动会被硬拦，不允许打开。
+  expose_code: __SMS_EXPOSE_CODE__
+  aliyun:
+    access_key_id: ""
+    access_key_secret: ""
+    sign_name: ""
+    template_code: ""
+  tencent:
+    secret_id: ""
+    secret_key: ""
+    sdk_app_id: ""
+    sign_name: ""
+    template_id: ""
+
+wechat:
+  app_id: ""
+  app_secret: ""
+  redirect_uri: "__BASE_URL__/auth/wechat/callback"
+  mock: __WECHAT_MOCK__
+
+cors:
+  allow_origins:
+    - "__BASE_URL__"
+  allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+  allow_headers: ["Origin", "Content-Type", "Authorization", "X-Request-Id"]
+  expose_headers: ["X-Request-Id"]
+  allow_credentials: true
+  max_age: 12h
+
+web:
+  enabled: true
+  # 留空 = 使用 go:embed 打进二进制的那份静态站点
+  dir: ""
+
+storage:
+  driver: local
+  public_base_url: ""
+  max_size_mb: 50
+  # 必须与 jwt.secret 分开：密钥复用意味着 JWT 泄露后历史私有文件链接一起失效
+  sign_secret: "__SIGN_SECRET__"
+  local:
+    dir: "/opt/ops-expert/data/uploads"
+
+payment:
+  provider: __PAY_PROVIDER__       # mock | offline | wechat | alipay
+  pay_timeout: 15m
+  auto_confirm_after: 48h
+  commission_rate_bp: 1500
+  notify_url: ""
+
+scheduler:
+  enabled: true
+  interval: 1m
+  batch_size: 100
+  job_timeout: 30s
+  run_on_start: true               # 重启后积压的超时单/待确认单不用等一个周期

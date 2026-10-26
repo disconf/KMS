@@ -1,0 +1,100 @@
+# 生产环境应用配置模板
+#
+# 由 bootstrap.sh 渲染成同目录 config.yaml（git 忽略），挂载进容器
+# /app/configs/config.yaml。占位符 __XXX__ 在首次部署时被真实值替换；
+# 之后手工改 config.yaml 即可，重新部署不会覆盖。
+
+app:
+  name: kms
+  env: prod
+  addr: ":8080"
+  base_url: "https://__DOMAIN__"
+  frontend_url: "https://__DOMAIN__"
+  read_timeout: 15s
+  write_timeout: 30s
+  shutdown_timeout: 10s
+  # 生产默认关闭 /docs 与 /openapi.yaml：openapi 把全部接口结构写给人看，
+  # 公开挂着等于替扫描器省掉探测。要临时开放改成 true 后重启。
+  expose_docs: false
+
+log:
+  level: info
+  format: text
+  add_source: false
+
+database:
+  driver: mysql
+  dsn: "kms:__MYSQL_APP_PASSWORD__@tcp(mysql:3306)/__MYSQL_DATABASE__?charset=utf8mb4&parseTime=True&loc=Local"
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime: 1h
+  auto_migrate: true
+  log_level: warn
+
+redis:
+  addr: "redis:6379"
+  password: ""
+  db: 0
+  pool_size: 20
+  dial_timeout: 3s
+
+jwt:
+  secret: "__JWT_SECRET__"
+  issuer: kms
+  access_ttl: 2h
+  refresh_ttl: 168h
+
+sms:
+  # 通道尚未接通时先用 webhook 占位（未配置 URL 时发送会明确报错），
+  # 管理后台靠密码登录，不受影响。拿到短信资质后填 webhook/aliyun/tencent。
+  provider: webhook
+  code_ttl: 5m
+  send_interval: 60s
+  hourly_limit: 5
+  daily_limit: 20
+  webhook:
+    url: "__SMS_WEBHOOK_URL__"
+    token: ""
+
+wechat:
+  app_id: ""
+  app_secret: ""
+  redirect_uri: "https://__DOMAIN__/auth/wechat/callback"
+  mock: false
+
+cors:
+  allow_origins:
+    - "https://__DOMAIN__"
+  allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+  allow_headers: ["Origin", "Content-Type", "Authorization", "X-Request-Id"]
+  expose_headers: ["X-Request-Id"]
+  allow_credentials: true
+  max_age: 12h
+
+web:
+  enabled: true
+  # 留空 = 使用 go:embed 打进二进制的那份静态站点
+  dir: ""
+
+storage:
+  driver: local
+  public_base_url: ""
+  max_size_mb: 50
+  sign_secret: "__SIGN_SECRET__"
+  local:
+    dir: "/app/data/uploads"
+
+payment:
+  # offline = 线下收款后由后台确认。接通微信/支付宝前不要写 mock。
+  provider: offline
+  pay_timeout: 15m
+  auto_confirm_after: 48h
+  commission_rate_bp: 1500
+  notify_url: ""
+
+scheduler:
+  enabled: true
+  interval: 1m
+  batch_size: 100
+  job_timeout: 30s
+  run_on_start: true

@@ -1,0 +1,39 @@
+[Unit]
+Description=Ops Expert Platform API
+Documentation=file:///opt/ops-expert/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opsexpert
+Group=opsexpert
+WorkingDirectory=/opt/ops-expert
+ExecStart=/opt/ops-expert/bin/ops-expert-api -config /opt/ops-expert/configs/config.yaml
+
+# 崩溃就拉起来。应用自己是优雅退出（先停 HTTP 再停调度器），
+# 所以给足 20s，超时才 SIGKILL —— 被强杀时正在结算的订单会留在原地等下一轮扫描，
+# 幂等不会重复入账，但日志里会多一条"服务已停止"缺失，排查时容易误判成崩溃。
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+
+LimitNOFILE=65535
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ops-expert
+
+# 最小权限：进程只写自己的数据目录，其他路径一律只读
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+# 注意这里用的是 ReadWriteDirectories 而不是 ReadWritePaths：
+# 本机是 systemd 219（CentOS 7），219 只认旧名字，写成 ReadWritePaths 会被当成
+# 未知指令丢掉——不报错，但白名单静默失效，应用写 data 目录时才会以
+# "read-only file system" 的形式炸出来。新系统把旧名当兼容别名，仍然有效。
+ReadWriteDirectories=/opt/ops-expert/data /opt/ops-expert/logs
+
+[Install]
+WantedBy=multi-user.target
