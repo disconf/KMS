@@ -1,0 +1,12 @@
+# 构建上下文裁剪：这些目录只在本机有意义，
+# 进了 context 会让每次 docker build 白传几百 MB。
+bin/
+dist/
+data/
+.dev-run/
+.smoke-run/
+*.log
+*.db
+*.db-shm
+*.db-wal
+.git/
