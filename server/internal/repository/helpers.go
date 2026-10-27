@@ -150,3 +150,9 @@ func isDuplicateKeyError(err error) bool {
 	}
 	return false
 }
+
+// IsDuplicateKey 供 service 层判断唯一索引冲突（如并发注册同一邮箱）。
+//
+// 导出它而不是让 service 各写一份字符串匹配：判断逻辑一旦要加
+// PostgreSQL 之类的方言，只需改这一处。
+func IsDuplicateKey(err error) bool { return isDuplicateKeyError(err) }

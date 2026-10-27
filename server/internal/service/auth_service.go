@@ -24,6 +24,7 @@ import (
 	"github.com/opsexpert/platform/internal/pkg/tokenstore"
 	"github.com/opsexpert/platform/internal/pkg/validate"
 	"github.com/opsexpert/platform/internal/repository"
+	"github.com/opsexpert/platform/internal/service/mailer"
 	"github.com/opsexpert/platform/internal/service/sms"
 	"github.com/opsexpert/platform/internal/service/wechat"
 )
@@ -62,6 +63,7 @@ type AuthService struct {
 
 	sms    sms.Provider
 	wechat wechat.Provider
+	mail   mailer.Provider
 
 	cfg *config.Config
 }
@@ -75,6 +77,7 @@ func NewAuthService(
 	jwtMgr *jwtx.Manager,
 	smsProvider sms.Provider,
 	wechatProvider wechat.Provider,
+	mailProvider mailer.Provider,
 	cfg *config.Config,
 ) *AuthService {
 	return &AuthService{
@@ -85,6 +88,7 @@ func NewAuthService(
 		jwt:     jwtMgr,
 		sms:     smsProvider,
 		wechat:  wechatProvider,
+		mail:    mailProvider,
 		cfg:     cfg,
 	}
 }
@@ -486,11 +490,12 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req dto.U
 	}
 
 	if req.Email != nil {
-		email := strings.TrimSpace(*req.Email)
-		if len(email) > dto.EmailMaxLen() || (email != "" && !strings.Contains(email, "@")) {
-			return nil, errcode.ErrParamInvalid.WithMsg("邮箱格式不正确")
-		}
-		fields["email"] = email
+		// 邮箱是登录主凭据，不能在这里直接改。
+		//
+		// 放开它等于留了一个"把账号改到别人邮箱"或"改成未验证邮箱绕过校验"的口子。
+		// 换绑邮箱应该走"新邮箱收码 → 校验通过 → 写入"的独立流程，
+		// 在那条流程做出来之前，这里只受理昵称与头像。
+		return nil, errcode.ErrParamInvalid.WithMsg("邮箱暂不支持在个人资料里修改")
 	}
 
 	if len(fields) == 0 {
@@ -508,15 +513,28 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req dto.U
 // ToUserProfile 把模型转换为对外 DTO，敏感字段在此统一脱敏。
 func ToUserProfile(user *model.User, expertStatus string) dto.UserProfile {
 	return dto.UserProfile{
-		ID:           user.ID,
-		Phone:        validate.MaskPhone(user.PhoneValue()),
-		Nickname:     user.Nickname,
-		Avatar:       user.Avatar,
-		Email:        user.Email,
-		Role:         user.Role,
-		ExpertStatus: expertStatus,
-		CreatedAt:    user.CreatedAt,
+		ID:              user.ID,
+		Phone:           validate.MaskPhone(user.PhoneValue()),
+		Nickname:        user.Nickname,
+		Avatar:          user.Avatar,
+		Email:           user.EmailValue(),
+		Role:            user.Role,
+		ExpertStatus:    expertStatus,
+		CreatedAt:       user.CreatedAt,
+		SpeakStatus:     speakStatusOrDefault(user.SpeakStatus),
+		SpeakReviewNote: user.SpeakReviewNote,
+		SpeakAppliedAt:  user.SpeakAppliedAt,
+		CanSpeak:        user.CanSpeak(),
 	}
+}
+
+// speakStatusOrDefault 老数据里 speak_status 可能是空串（列刚加上时），
+// 对外一律呈现 none，避免前端拿到空值后渲染出"未知状态"。
+func speakStatusOrDefault(s string) string {
+	if s == "" {
+		return model.SpeakNone
+	}
+	return s
 }
 
 func lastN(s string, n int) string {

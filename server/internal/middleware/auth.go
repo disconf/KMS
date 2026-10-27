@@ -78,6 +78,7 @@ func Auth(mgr *jwtx.Manager, store *tokenstore.Store, accounts AccountLookup) gi
 			// 角色与专家状态都以库为准，不信令牌里的快照。
 			Role:         account.Role,
 			ExpertStatus: expertStatus,
+			SpeakStatus:  account.SpeakStatus,
 			JTI:          claims.ID,
 		})
 		c.Next()

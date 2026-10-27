@@ -19,7 +19,10 @@ import (
 	"github.com/opsexpert/platform/internal/pkg/jwtx"
 	"github.com/opsexpert/platform/internal/pkg/tokenstore"
 	"github.com/opsexpert/platform/internal/repository"
+	"github.com/opsexpert/platform/internal/service/mailer"
 	"github.com/opsexpert/platform/internal/service/sms"
+	"gorm.io/gorm"
+
 	"github.com/opsexpert/platform/internal/service/wechat"
 )
 
@@ -34,6 +37,8 @@ type authFixture struct {
 	cache  cache.Cache
 	jwt    *jwtx.Manager
 	tokens *tokenstore.Store
+	// db 供需要直接拼仓储的测试用（如发言申请），避免再造一套 fixture。
+	db *gorm.DB
 }
 
 // newAuthFixture 用临时 SQLite + 内存缓存 + mock 通道搭建一套完整的认证环境。
@@ -50,6 +55,9 @@ func newAuthFixture(t *testing.T) *authFixture {
 	// 打开验证码回传，测试才能拿到 devCode 完成登录闭环。
 	cfg.SMS.ExposeCode = true
 	cfg.SMS.Provider = "mock"
+	// 邮件同理：mock 通道 + 回传验证码，邮箱注册链路才可测。
+	cfg.Mail.ExposeCode = true
+	cfg.Mail.Provider = "mock"
 	cfg.Redis.Addr = "" // 强制走内存缓存，测试不依赖外部 Redis
 
 	db, err := bootstrap.OpenDB(cfg)
@@ -71,15 +79,17 @@ func newAuthFixture(t *testing.T) *authFixture {
 
 	smsProvider, err := sms.New(cfg.SMS)
 	require.NoError(t, err)
+	mailProvider, err := mailer.New(cfg.Mail)
+	require.NoError(t, err)
 
 	svc := NewAuthService(
 		repository.NewUserRepo(db),
 		repository.NewExpertRepo(db),
 		memCache, tokens, jwtMgr,
-		smsProvider, wechat.New(cfg.Wechat), cfg,
+		smsProvider, wechat.New(cfg.Wechat), mailProvider, cfg,
 	)
 
-	return &authFixture{svc: svc, cfg: cfg, cache: memCache, jwt: jwtMgr, tokens: tokens}
+	return &authFixture{svc: svc, cfg: cfg, cache: memCache, jwt: jwtMgr, tokens: tokens, db: db}
 }
 
 // sendCode 走真实发送流程并取回验证码。
@@ -327,13 +337,18 @@ func TestProfileMaskedAndUpdate(t *testing.T) {
 
 	nickname := "  运维老王  "
 	email := "laowang@example.com"
-	updated, err := f.svc.UpdateProfile(ctx, login.User.ID, dto.UpdateProfileReq{
+	// 邮箱不能在资料里直接改：这条路径没有验证码，能改等于能抢注别人的邮箱。
+	// 邮箱的唯一变更入口是注册时的验证（见 auth_email.go）。
+	_, err = f.svc.UpdateProfile(ctx, login.User.ID, dto.UpdateProfileReq{
 		Nickname: &nickname,
 		Email:    &email,
 	})
+	require.ErrorIs(t, err, errcode.ErrParamInvalid, "资料页改邮箱必须被拒绝")
+
+	updated, err := f.svc.UpdateProfile(ctx, login.User.ID, dto.UpdateProfileReq{Nickname: &nickname})
 	require.NoError(t, err)
 	assert.Equal(t, "运维老王", updated.Nickname, "昵称首尾空格应被裁剪")
-	assert.Equal(t, "laowang@example.com", updated.Email)
+	assert.Equal(t, "", updated.Email, "没验证过的邮箱不该出现在资料里")
 	assert.Equal(t, "138****1111", updated.Phone, "未传手机号时不应被改动")
 }
 

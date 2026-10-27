@@ -102,6 +102,10 @@ check('投稿页：未登录不渲染表单', !contributeAnon.includes('id="c-fo
 const mineAnon = await renderPage('我的投稿（未登录）', () => contributeMod.myContributionsPage(ctx()));
 check('我的投稿：未登录给登录引导', mineAnon.includes('登录后才能查看投稿'));
 
+const meMod = await load('pages-me.js');
+const meAnon = await renderPage('我的（未登录）', () => meMod.mePage(ctx()));
+check('我的：未登录给登录引导', meAnon.includes('请先登录'));
+
 const adminAnonMod = await load('pages-admin.js');
 const adminAnonHtml = await renderPage('后台（未登录）', () => adminAnonMod.adminDashboardPage(ctx()));
 check('后台：未登录给登录引导', adminAnonHtml.includes('请先登录运营账号'));
@@ -588,7 +592,52 @@ try {
 }
 check('订单页：临时账号登录', loggedIn);
 
+// ------------------------------------------------------ 只读与发言权限 --
+//
+// 短信首登自动建的账号默认只读：这正是这条规则最真实的样本，不用再造一个。
+// 三个"发布"入口都必须先看到权限说明，而不是一张填完提交必然失败的表格。
+const roContribute = await renderPage('投稿页（只读账号）', () => contributeMod.contributePage(ctx()));
+check('只读账号：投稿页给权限说明而不是表单',
+  roContribute.includes('需要先开通发言权限') && !roContribute.includes('id="c-form"'));
+check('只读账号：权限说明有直达申请页的入口', roContribute.includes('data-act="go"'));
+
+const roAsk = await renderPage('提问页（只读账号）', () => qaMod.qaAskPage(ctx()));
+check('只读账号：问答提问页同样被拦', roAsk.includes('需要先开通发言权限'));
+
+const roBounty = await renderPage('悬赏页（只读账号）', () => questionPages.questionNewPage(ctx()));
+check('只读账号：悬赏发布页同样被拦', roBounty.includes('需要先开通发言权限'));
+
+let speakGranted = false;
 if (loggedIn) {
+  // 后面几节（悬赏、投稿表单、后台）都需要一个"能发言"的账号。
+  // 这里走一次真实链路：提交申请 → 管理员通过 → 还原临时账号的会话。
+  // 还原而不是重新登录，是因为验证码有 60 秒间隔，重登会白等一分钟。
+  const tempSnap = apiMod.snapshotSession();
+  try {
+    const uid = (apiMod.currentUser() || {}).id;
+    await api.applySpeak({ realName: '自检账号', contact: phone, note: '渲染自检' });
+    await loginAsAdmin();
+    await api.adminSpeakReview(uid, { approve: true, note: '渲染自检放行' });
+    speakGranted = true;
+  } catch (e) {
+    check('只读账号：提交实名申请并由管理员通过', false, `${e.name}: ${e.message}`);
+  } finally {
+    apiMod.restoreSession(tempSnap);
+    // 快照里的 user.canSpeak 是审批之前的旧值，而前端的权限判断读的就是它。
+    // 不刷新一次，后面几节会继续按"只读"渲染，看起来像审核没生效。
+    if (speakGranted) await apiMod.refreshProfile();
+  }
+  check('只读账号：提交实名申请并由管理员通过', speakGranted);
+}
+
+if (loggedIn && speakGranted) {
+  // 通过之后「我的」页要立刻反映新状态：这张卡是用户唯一能看到"我现在能不能说话"的地方。
+  const meHtml = await renderPage('我的（登录态）', () => meMod.mePage(ctx()));
+  check('我的：显示发言权限状态', meHtml.includes('发言权限') && meHtml.includes('可发言'));
+  check('我的：资料区渲染出来', meHtml.includes('me-rows') && meHtml.includes('me-card'));
+}
+
+if (loggedIn && speakGranted) {
   const skills = await api.skills().catch(() => []);
   const skillId = skills.length ? String(skills[0].id) : '';
 
@@ -802,10 +851,17 @@ check('后台：非管理员给无权限说明', adminDenied.includes('没有后
 
 // 管理员账号（dev/test 环境由种子创建）。
 //
-// 同一号码 60 秒只能发一条验证码，而冒烟脚本用的也是这个号码——
-// 连着跑两趟时第二趟必然撞上。撞了就等一轮再试，不能让"脚本跑太快"
+// 优先用口令登录：自检里要登两次管理员（一次给只读账号放权限，一次跑后台断言），
+// 而同一号码 60 秒只能发一条验证码——走短信就必然白等一轮。
+// 口令被改过时退回短信，并把"撞限流"当成正常保护等一轮，不让脚本跑得快
 // 表现成"后台坏了"：这条断言红过一次，以后就没人信它了。
 async function loginAsAdmin() {
+  try {
+    await apiMod.loginByPassword('13800000000', 'Admin@12345');
+    if ((apiMod.currentUser() || {}).role === 'admin') return true;
+  } catch {
+    // 口令不对就往下走短信，不在这里下结论。
+  }
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const sent = await apiMod.sendSMSCode('13800000000');
@@ -829,9 +885,16 @@ if (adminOk) check('后台：管理员登录', true);
 if (adminOk) {
   const dashHtml = await renderPage('后台概览', () => admin.adminDashboardPage(ctx()));
   check('后台概览：统计卡都在',
-    ['待审内容', '待审专家', '待审提现', '待打款', '待支付订单', '订阅源异常'].every((s) => dashHtml.includes(s)));
+    ['待审内容', '待审专家', '待审提现', '待打款', '待审发言', '待支付订单', '订阅源异常'].every((s) => dashHtml.includes(s)));
   check('后台概览：子导航可跳到待审队列', dashHtml.includes('#/admin/review'));
   check('后台概览：子导航含提现审批', dashHtml.includes('#/admin/withdrawals'));
+  check('后台概览：子导航含发言权限', dashHtml.includes('#/admin/speak'));
+
+  const speakAdminHtml = await renderPage('后台发言申请', () => admin.adminSpeakApplicationsPage(ctx('tab=pending')));
+  check('后台发言申请：四个状态 tab 都在',
+    ['待审核', '已通过', '已驳回', '全部'].every((s) => speakAdminHtml.includes(s)));
+  check('后台发言申请：列表区渲染（有内容或空态）',
+    speakAdminHtml.includes('admin-table') && (speakAdminHtml.includes('<tr>') || speakAdminHtml.includes('没有待审核')));
 
   const reviewHtml = await renderPage('后台待审队列', () => admin.adminReviewPage(ctx()));
   check('待审队列：四个内容 tab 都在',

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -34,6 +35,23 @@ func (r *UserRepo) FindByID(ctx context.Context, id int64) (*model.User, error) 
 func (r *UserRepo) FindByPhone(ctx context.Context, phone string) (*model.User, error) {
 	var u model.User
 	err := r.db.WithContext(ctx).Where("phone = ?", phone).First(&u).Error
+	if err != nil {
+		return nil, normalizeNotFound(err, errcode.ErrAccountNotFound)
+	}
+	return &u, nil
+}
+
+// FindByEmail 按邮箱查询；不存在时返回 errcode.ErrAccountNotFound。
+//
+// 邮箱统一小写存储与查询：MySQL 默认排序规则本身不区分大小写，
+// 但 SQLite 区分，靠代码统一归一化才不会出现"本地能登、线上登不上"。
+func (r *UserRepo) FindByEmail(ctx context.Context, email string) (*model.User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return nil, errcode.ErrAccountNotFound
+	}
+	var u model.User
+	err := r.db.WithContext(ctx).Where("email = ?", email).First(&u).Error
 	if err != nil {
 		return nil, normalizeNotFound(err, errcode.ErrAccountNotFound)
 	}
@@ -143,6 +161,45 @@ func (r *UserRepo) TouchLogin(ctx context.Context, id int64, ip string) error {
 		return errcode.ErrDatabase.Wrap(fmt.Errorf("更新登录时间失败: %w", err))
 	}
 	return nil
+}
+
+// UpdateSpeakApply 以 CAS 方式写发言申请状态：只有当前状态等于 from 时才更新。
+//
+// 返回受影响行数，调用方据此区分"成功"与"别人已经先处理了"。
+// 不用读-改-写的两段式：两个管理员同时点"通过"，后者会把
+// 第一个人的审核备注覆盖掉，而日志里看不出谁赢。
+func (r *UserRepo) UpdateSpeakApply(ctx context.Context, id int64, from string, fields map[string]any) (int64, error) {
+	if len(fields) == 0 {
+		return 0, nil
+	}
+	res := r.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ? AND speak_status = ?", id, from).
+		Updates(fields)
+	if res.Error != nil {
+		return 0, errcode.ErrDatabase.Wrap(fmt.Errorf("更新发言申请失败: %w", res.Error))
+	}
+	return res.RowsAffected, nil
+}
+
+// ListSpeakApplications 按状态分页查询发言申请，按提交时间倒序。
+func (r *UserRepo) ListSpeakApplications(ctx context.Context, status string, offset, limit int) ([]model.User, int64, error) {
+	q := r.db.WithContext(ctx).Model(&model.User{}).
+		Where("speak_applied_at IS NOT NULL")
+	if status != "" && status != "all" {
+		q = q.Where("speak_status = ?", status)
+	}
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, errcode.ErrDatabase.Wrap(fmt.Errorf("统计发言申请失败: %w", err))
+	}
+
+	var rows []model.User
+	err := q.Order("speak_applied_at DESC").Offset(offset).Limit(limit).Find(&rows).Error
+	if err != nil {
+		return nil, 0, errcode.ErrDatabase.Wrap(fmt.Errorf("查询发言申请失败: %w", err))
+	}
+	return rows, total, nil
 }
 
 // BindWechat 绑定微信身份到已有账号。

@@ -40,6 +40,7 @@ type Options struct {
 	Finance   *service.FinanceService
 	Settings  *service.SettingService
 	Skills    *service.SkillAdminService
+	Speak     *service.SpeakService
 	JWT       *jwtx.Manager
 	Tokens    *tokenstore.Store
 
@@ -147,6 +148,14 @@ func registerAuthRoutes(g *gin.RouterGroup, opt Options) {
 	// 公开接口：登录链路本身就是用来换取身份的，不能要求已登录。
 	auth.POST("/sms/send", h.SendCode)
 	auth.POST("/login/sms", h.LoginBySMS)
+
+	// 邮箱注册与登录。这是当前唯一可自助注册的通道：
+	// 手机号短信通道在生产没接通，而邮箱不依赖第三方授权，
+	// 只要有 SMTP 就能用（配置见 mail.*）。
+	auth.POST("/email/send", h.SendEmailCode)
+	auth.POST("/register", h.RegisterByEmail)
+	auth.POST("/login/email", h.LoginByEmail)
+	auth.POST("/login/email-code", h.LoginByEmailCode)
 	// 密码登录：线上短信通道未接通时的后台入口。只对已设密码的账号生效，
 	// 失败限流在 service 层（按手机号 15 分钟 5 次）。
 	auth.POST("/login/password", h.LoginByPassword)
@@ -164,6 +173,12 @@ func registerUserRoutes(g *gin.RouterGroup, opt Options) {
 	authed.GET("/me", h.Me)
 	authed.PUT("/me", h.UpdateMe)
 	authed.POST("/me/password", h.ChangePassword)
+
+	// 发言权限申请。查询与提交都挂在 /me 下：
+	// 它是"我个人状态的一部分"，不是公共资源。
+	sh := handler.NewSpeakHandler(opt.Speak)
+	authed.GET("/me/speak-apply", sh.State)
+	authed.POST("/me/speak-apply", sh.Apply)
 }
 
 // registerKnowledgeRoutes 知识库前台路由。
@@ -386,6 +401,12 @@ func registerAdminRoutes(g *gin.RouterGroup, opt Options) {
 		opt.authMW(),
 		middleware.RequireRole(model.RoleAdmin),
 	)
+
+	// 发言权限申请审核。放在 /admin 根下而不是 /admin/users 下：
+	// 它是独立的工作队列（像专家审核一样），不是一个用户的子资源。
+	speakAdmin := handler.NewSpeakHandler(opt.Speak)
+	admin.GET("/speak-applications", speakAdmin.ListApplications)
+	admin.POST("/speak-applications/:id/review", speakAdmin.Review)
 
 	categories := admin.Group("/kb/categories")
 	categories.GET("", h.ListCategories)

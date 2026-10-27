@@ -15,6 +15,7 @@ import { api, isLoggedIn, ApiError } from './api.js';
 import { esc, icon } from './util.js';
 import { emptyHTML, toastError, toastOk } from './ui.js';
 import { fmtCents } from './orders.js';
+import { speakGateOrNull } from './auth-modal.js';
 
 const TITLE_MIN = 5;
 const TITLE_MAX = 200;
@@ -55,6 +56,14 @@ export async function questionNewPage() {
       title: '发布悬赏',
     };
   }
+
+  // 只读账号：悬赏是要花真金白银发给服务方的，先要有发言资格。
+  // 这个判断必须在渲染表单之前——让人填完一屏再被服务端拒掉是最差的体验。
+  const speakGate = speakGateOrNull('发布悬赏', {
+    head: '把故障现象写清楚，值班专家会接单。',
+    desc: '发布悬赏需要先开通发言权限：悬赏内容会公开展示，也会由专家接单跟进。',
+  });
+  if (speakGate) return speakGate;
 
   // 技能拿不到不算致命：没有它只是少一列可选标签，页面照样要能打开
   const skills = await api.skills().catch(() => []);

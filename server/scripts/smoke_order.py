@@ -89,21 +89,46 @@ def code_from_log(phone):
     raise SystemExit("未能从日志中取到验证码: " + phone)
 
 
+# 同一号码 60 秒只能要一次验证码。grant_speak 要管理员、后面验后台还要管理员，
+# 不缓存就得白等一分钟——缓存令牌是安全的，它本来就是长有效期的。
+_LOGIN_CACHE = {}
+
+
 def login(phone, nickname=None):
     """拿到令牌。优先用响应里回传的 devCode，没有再退回读服务日志。"""
+    if phone in _LOGIN_CACHE:
+        return _LOGIN_CACHE[phone]
     for attempt in range(2):
         code, p = soft_call("POST", "/auth/sms/send", {"phone": phone, "scene": "login"},
                             label=f"获取验证码 {phone}")
         if code == 200:
             dev = (p.get("data") or {}).get("devCode")
             if dev:
-                return _login_with(phone, dev, nickname)
+                _LOGIN_CACHE[phone] = _login_with(phone, dev, nickname)
+                return _LOGIN_CACHE[phone]
             break
         print("     ... 撞上发送间隔限制，等待 61s 后重试")
         time.sleep(61)
     if LOG:
-        return _login_with(phone, code_from_log(phone), nickname)
+        _LOGIN_CACHE[phone] = _login_with(phone, code_from_log(phone), nickname)
+        return _LOGIN_CACHE[phone]
     raise SystemExit(f"取不到验证码：{phone}（请打开 sms.expose_code，或把服务日志路径作为第一个参数）")
+
+
+def grant_speak(token, uid, phone=""):
+    """把演练账号从"只读"提升到"可发言"。
+
+    注册出来（含短信首登自动建号）的账号一律只读，而悬赏是对外发布：
+    它会进接单大厅让专家接单，所以 CreateQuestion 先过发言权限，只读拿 20026。
+    这里把「提交实名申请 → 管理员通过」走一遍，等于把新规则本身也验了一次。
+    """
+    call("POST", "/me/speak-apply",
+         {"realName": "演练账号", "contact": phone or "13800007777", "note": "冒烟演练"},
+         token=token, expect=200, label="提交实名申请")
+    admin_token, _ = login("13800000000")
+    call("POST", f"/admin/speak-applications/{uid}/review",
+         {"approve": True, "note": "冒烟演练放行"}, token=admin_token,
+         expect=200, label="审核通过发言申请")
 
 
 def _login_with(phone, code, nickname):
@@ -126,6 +151,8 @@ user_token, user = login("13800007777", "运维老王")
 print(f"     下单人 id={user['id']} role={user['role']}")
 expert_token, expert = login("13900000001")
 print(f"     专家   id={expert['id']} role={expert['role']}")
+# 短信首登自动建号，这类账号默认只读；悬赏属于对外发布，得先开权限。
+grant_speak(user_token, user["id"], "13800007777")
 
 _, p = call("GET", "/experts?pageSize=50", expect=200, label="专家列表")
 cards = jget(p, "data", "list")

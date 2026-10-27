@@ -186,8 +186,12 @@ func (h *ArticleHandler) Contribute(c *gin.Context) {
 	// 角色与专家状态都取自数据库，不信客户端也不信令牌快照。
 	direct := false
 	if idn, ok := authctx.Get(c); ok {
-		viewer := service.QaViewer{UserID: idn.UserID, Role: idn.Role, ExpertStatus: idn.ExpertStatus}
+		viewer := service.QaViewer{UserID: idn.UserID, Role: idn.Role, ExpertStatus: idn.ExpertStatus, SpeakStatus: idn.SpeakStatus}
 		direct = viewer.CanPublishDirectly()
+	}
+	// 只读账号连投稿入口都进不来：投稿是"发布"，不是"浏览"。
+	if !RequireSpeak(c) {
+		return
 	}
 	detail, err := h.articles.Contribute(c.Request.Context(), userID, req, direct)
 	if err != nil {

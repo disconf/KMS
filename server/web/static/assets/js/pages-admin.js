@@ -66,6 +66,7 @@ const ADMIN_NAV = [
   { href: '#/admin/finance',   label: '对账',     test: (p) => p.startsWith('/admin/finance') },
   { href: '#/admin/orders',    label: '订单',     test: (p) => p.startsWith('/admin/orders') },
   { href: '#/admin/users',     label: '用户',     test: (p) => p.startsWith('/admin/users') },
+  { href: '#/admin/speak',     label: '发言权限', test: (p) => p.startsWith('/admin/speak') },
   { href: '#/admin/settings',  label: '配置',     test: (p) => p.startsWith('/admin/settings') },
 ];
 
@@ -150,13 +151,14 @@ export async function adminDashboardPage(ctx) {
   const gate = adminGate();
   if (gate) return gate;
 
-  const [pendingArts, pendingExperts, payOrders, sources, wdPending, wdApproved] = await Promise.allSettled([
+  const [pendingArts, pendingExperts, payOrders, sources, wdPending, wdApproved, speakPending] = await Promise.allSettled([
     api.adminArticles({ status: 'pending', pageSize: 5 }),
     api.adminExperts({ status: 'pending', pageSize: 1 }),
     api.adminOrders({ status: 'pending_pay', pageSize: 1 }),
     api.newsSources(),
     api.adminWithdrawals({ status: 'pending', pageSize: 1 }),
     api.adminWithdrawals({ status: 'approved', pageSize: 1 }),
+    api.adminSpeakApplications({ status: 'pending', pageSize: 1 }),
   ]);
 
   const artPage = pendingArts.status === 'fulfilled' ? pendingArts.value : { list: [], total: 0 };
@@ -164,6 +166,7 @@ export async function adminDashboardPage(ctx) {
   const payTotal = payOrders.status === 'fulfilled' ? payOrders.value.total : 0;
   const wdPendingTotal = wdPending.status === 'fulfilled' ? wdPending.value.total : 0;
   const wdApprovedTotal = wdApproved.status === 'fulfilled' ? wdApproved.value.total : 0;
+  const speakTotal = speakPending.status === 'fulfilled' ? speakPending.value.total : 0;
   const srcList = sources.status === 'fulfilled' ? sources.value : [];
   const brokenSrc = srcList.filter((s) => s.lastStatus === 'failed');
   const pendingNews = srcList.reduce((max, s) => Math.max(max, Number(s.pendingTotal) || 0), 0);
@@ -193,6 +196,7 @@ export async function adminDashboardPage(ctx) {
       ${statCard('待审专家', expertTotal, '入驻申请等待处理', '#/admin/experts?status=pending')}
       ${statCard('待审提现', wdPendingTotal, '钱还冻在专家账户里', '#/admin/withdrawals?status=pending', (wdPendingTotal ? 'is-warn' : ''))}
       ${statCard('待打款', wdApprovedTotal, '已通过，等你线下转账', '#/admin/withdrawals?status=approved', (wdApprovedTotal ? 'is-warn' : ''))}
+      ${statCard('待审发言', speakTotal, '实名通过后才有发言权', '#/admin/speak?tab=pending', (speakTotal ? 'is-warn' : ''))}
       ${statCard('待支付订单', payTotal, '超时会自动关闭', '#/admin/orders?status=pending_pay')}
       ${statCard('订阅源异常', brokenSrc.length, `${srcList.length} 个源在跑`, '#/admin/news', (brokenSrc.length ? 'is-danger' : ''))}
     </div>
@@ -2781,6 +2785,177 @@ function openUserRoleModal(d) {
       } catch (err) {
         e.currentTarget.disabled = false;
         toastError(err.message || '修改失败');
+      }
+    });
+  });
+}
+
+/* -------------------------------------------------------- 发言权限 -- */
+
+const SPEAK_TABS = [
+  { key: 'pending', label: '待审核' },
+  { key: 'approved', label: '已通过' },
+  { key: 'rejected', label: '已驳回' },
+  { key: 'all', label: '全部' },
+];
+
+const SPEAK_STATUS_LABEL = {
+  none: '未申请',
+  pending: '待审核',
+  approved: '可发言',
+  rejected: '已驳回',
+};
+
+const SPEAK_STATUS_TONE = {
+  none: '',
+  pending: 'chip-warn',
+  approved: 'chip-ok',
+  rejected: 'chip-danger',
+};
+
+function speakStatusChip(status) {
+  const s = status || 'none';
+  return `<span class="chip ${SPEAK_STATUS_TONE[s] || ''}">${esc(SPEAK_STATUS_LABEL[s] || s)}</span>`;
+}
+
+/**
+ * 发言权限审核。
+ *
+ * 注册只给只读：账号能登录、能看内容、能进个人中心，但提不了问、答不了题、
+ * 投不了稿。要开口得先交实名（姓名 + 联系方式），这里放行。
+ * 入口跟「用户治理」分开：那边管账号能不能用（封禁），这边管能不能说话。
+ */
+export async function adminSpeakApplicationsPage(ctx) {
+  const gate = adminGate();
+  if (gate) return gate;
+
+  const tab = SPEAK_TABS.some((t) => t.key === ctx.params.get('tab'))
+    ? ctx.params.get('tab') : 'pending';
+  const page = Math.max(1, Number(ctx.params.get('page')) || 1);
+  const pageSize = 20;
+
+  // 「全部」按后端约定传空串，等价于不过滤状态。
+  const data = await api.adminSpeakApplications({
+    status: tab === 'all' ? '' : tab,
+    page,
+    pageSize,
+  });
+  const items = data.list || [];
+
+  const tabsHTML = `<div class="seg admin-tabs">${SPEAK_TABS.map((t) => `
+    <a href="#/admin/speak?tab=${t.key}" class="${t.key === tab ? 'is-active' : ''}">${esc(t.label)}</a>`).join('')}</div>`;
+
+  const rows = items.map((it) => {
+    const who = it.nickname || '未设昵称';
+    const contact = it.email || it.phone || '';
+    const pending = (it.status || 'pending') === 'pending';
+    return `<tr>
+      <td>
+        <div class="admin-cell-title">${esc(who)}</div>
+        <div class="admin-cell-sub">#${it.userId}${contact ? ' · ' + esc(contact) : ''}</div>
+      </td>
+      <td>
+        <div class="admin-cell-title">${esc(it.realName || '—')}</div>
+        <div class="admin-cell-sub">${esc(it.contact || '未留联系方式')}</div>
+      </td>
+      <td class="admin-cell-note">${it.note ? esc(it.note) : '<span class="muted-note">未填</span>'}</td>
+      <td>${speakStatusChip(it.status)}</td>
+      <td>${esc(fmtDate(it.appliedAt || it.createdAt))}</td>
+      <td class="admin-ops">${
+        pending
+          ? `<button class="btn btn-sm btn-primary" type="button" data-speak-approve="${it.userId}">通过</button>
+             <button class="btn btn-sm btn-danger" type="button" data-speak-reject="${it.userId}">驳回</button>`
+          : `<a class="link-sm" href="#/admin/users?keyword=${encodeURIComponent(it.email || it.phone || '')}">看账号${icon('right', 11)}</a>`
+      }</td>
+    </tr>`;
+  }).join('');
+
+  const body = `
+    <div class="admin-note-bar">
+      <span>${icon('info', 14)}通过后这个人立刻可以提问、回答与投稿，不需要重新登录。驳回必须写原因——对方要在「我的」里看到它才知道怎么改。</span>
+    </div>
+    <div class="card admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr>
+          <th>账号</th><th>实名信息</th><th>申请理由</th><th>状态</th><th>申请时间</th><th class="admin-ops">操作</th>
+        </tr></thead>
+        <tbody>${rows || `<tr><td colspan="6"><p class="muted-note">${
+          tab === 'pending' ? '没有待审核的发言申请。' : '没有匹配的申请记录。'
+        }</p></td></tr>`}</tbody>
+      </table>
+    </div>
+    <div class="admin-pager">${pagerHTML({ page, pageSize, total: data.total || 0 })}</div>`;
+
+  return {
+    title: '发言权限',
+    html: adminShell('/admin/speak', {
+      title: '发言权限',
+      desc: '新注册账号默认只读。实名申请通过后才有提问、回答、投稿的资格。',
+      actions: tabsHTML,
+      body,
+    }),
+    mount: (root) => {
+      bindPager(root, (p) => setHashQuery({ page: p > 1 ? String(p) : '' }, { keepPage: true }));
+
+      root.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+
+        const approveId = btn.getAttribute('data-speak-approve');
+        if (approveId) { openSpeakReviewModal(Number(approveId), items, true); return; }
+
+        const rejectId = btn.getAttribute('data-speak-reject');
+        if (rejectId) { openSpeakReviewModal(Number(rejectId), items, false); }
+      });
+    },
+  };
+}
+
+/** 通过 / 驳回共用一张弹窗：驳回时原因变必填。 */
+function openSpeakReviewModal(userId, items, approve) {
+  const target = (items || []).find((it) => Number(it.userId) === Number(userId)) || {};
+  const title = approve ? '通过发言申请' : '驳回发言申请';
+
+  openModal(`
+    <div class="modal-head">
+      <div>
+        <h2>${esc(title)}</h2>
+        <p>${esc(target.nickname || '未设昵称')} · ${esc(target.realName || '未填实名')}${
+          target.contact ? ' · ' + esc(target.contact) : ''}</p>
+      </div>
+    </div>
+    <div class="modal-body">
+      <p class="admin-hint">${approve
+        ? '通过后立刻生效：对方下一次请求就能提问与回答，不用重新登录。'
+        : '原因会显示在对方的「我的」页面。写清"缺什么"——比如联系方式打不通、姓名与账号对不上。'}</p>
+      <div class="field">
+        <label for="speak-note">审核备注${approve ? '（选填）' : '（必填）'}</label>
+        <textarea class="input code-input" id="speak-note" rows="3"
+          placeholder="${approve ? '例如：已电话确认身份' : '例如：联系方式无法接通，请补充可验证的手机号'}"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" type="button" data-modal-close>取消</button>
+        <button class="btn ${approve ? 'btn-primary' : 'btn-danger'}" type="button" data-do-speak
+          data-approve="${approve ? '1' : ''}">${approve ? '确认通过' : '确认驳回'}</button>
+      </div>
+    </div>
+  `, (modal) => {
+    const btn = modal.querySelector('[data-do-speak]');
+    btn.addEventListener('click', async () => {
+      const note = modal.querySelector('#speak-note').value.trim();
+      if (!approve && !note) {
+        toastError('请填写驳回原因');
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await api.adminSpeakReview(userId, { approve, note });
+        closeModal();
+        toastOk(approve ? '已通过，对方可以发言了' : '已驳回');
+        window.__reloadPage();
+      } catch (err) {
+        btn.disabled = false;
+        toastError(err.message || '操作失败');
       }
     });
   });

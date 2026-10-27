@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/opsexpert/platform/internal/pkg/authctx"
 	"github.com/opsexpert/platform/internal/pkg/errcode"
 	"github.com/opsexpert/platform/internal/pkg/response"
 )
@@ -45,4 +46,17 @@ func PathInt64(c *gin.Context, name string) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// RequireSpeak 校验当前账号是否有发布资格，没有则写出统一错误并返回 false。
+//
+// 每个"写内容"的入口都调它一次，而不是在 service 里各写一遍：
+// 漏掉一个入口就等于给只读账号开了一个后门，而这种漏
+// 只有在被刷了之后才会被发现。
+func RequireSpeak(c *gin.Context) bool {
+	if !authctx.CanSpeak(c) {
+		response.Fail(c, errcode.ErrSpeakNotAllowed)
+		return false
+	}
+	return true
 }

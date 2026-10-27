@@ -37,6 +37,8 @@ type QaViewer struct {
 	UserID       int64
 	Role         string
 	ExpertStatus string
+	// SpeakStatus 发言权限状态。只读账号（新注册默认）拿不到发布能力。
+	SpeakStatus string
 }
 
 // LoggedIn 是否已登录。
@@ -59,6 +61,18 @@ func (v QaViewer) IsApprovedExpert() bool {
 // 让他们和刚注册的账号一起排队等审，等于劝退最该回答的那批人。
 func (v QaViewer) CanPublishDirectly() bool {
 	return v.IsAdmin() || v.IsApprovedExpert()
+}
+
+// CanSpeak 是否有发言资格。
+//
+// 与 CanPublishDirectly 的区别：后者决定"发出来要不要审"，
+// 这里决定"能不能发"。新注册账号先只读，实名审核通过后才进入
+// "可以发、但要审"的队列——两道闸是叠加的，不是二选一。
+func (v QaViewer) CanSpeak() bool {
+	if v.IsAdmin() || v.Role == model.RoleExpert {
+		return true
+	}
+	return v.SpeakStatus == model.SpeakApproved
 }
 
 // QaService 问答广场业务。
@@ -197,6 +211,9 @@ func (s *QaService) Ask(ctx context.Context, viewer QaViewer, req dto.QaAskReq) 
 	if !viewer.LoggedIn() {
 		return nil, errcode.ErrUnauthorized
 	}
+	if !viewer.CanSpeak() {
+		return nil, errcode.ErrSpeakNotAllowed
+	}
 
 	title := strings.TrimSpace(req.Title)
 	if n := runeLen(title); n < 6 {
@@ -260,6 +277,9 @@ func (s *QaService) Ask(ctx context.Context, viewer QaViewer, req dto.QaAskReq) 
 func (s *QaService) Answer(ctx context.Context, viewer QaViewer, questionID int64, req dto.QaAnswerReq) (*dto.QaAnswerItem, error) {
 	if !viewer.LoggedIn() {
 		return nil, errcode.ErrUnauthorized
+	}
+	if !viewer.CanSpeak() {
+		return nil, errcode.ErrSpeakNotAllowed
 	}
 	q, err := s.qa.Get(ctx, questionID)
 	if err != nil {

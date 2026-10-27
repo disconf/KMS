@@ -253,8 +253,12 @@ func (h *QuizHandler) Contribute(c *gin.Context) {
 	// 角色与专家状态都取自数据库，不信客户端也不信令牌快照。
 	direct := false
 	if idn, ok := authctx.Get(c); ok {
-		viewer := service.QaViewer{UserID: idn.UserID, Role: idn.Role, ExpertStatus: idn.ExpertStatus}
+		viewer := service.QaViewer{UserID: idn.UserID, Role: idn.Role, ExpertStatus: idn.ExpertStatus, SpeakStatus: idn.SpeakStatus}
 		direct = viewer.CanPublishDirectly()
+	}
+	// 题目投稿同样属于"发布"，只读账号一律挡住。
+	if !RequireSpeak(c) {
+		return
 	}
 	resp, err := h.quizzes.Contribute(c.Request.Context(), userID, req, direct)
 	if err != nil {

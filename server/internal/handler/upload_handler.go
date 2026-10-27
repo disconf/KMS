@@ -10,6 +10,7 @@ import (
 	"github.com/opsexpert/platform/internal/pkg/errcode"
 	"github.com/opsexpert/platform/internal/pkg/logger"
 	"github.com/opsexpert/platform/internal/pkg/response"
+	"github.com/opsexpert/platform/internal/pkg/storage"
 	"github.com/opsexpert/platform/internal/service"
 )
 
@@ -58,13 +59,21 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 	// 在任何解析动作之前收紧请求体，避免超大请求被完整读入内存。
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, uploadBodyLimit)
 
+	// 只读账号只放行头像：换头像不产生公共内容，
+	// 而其他场景（资源附件、证书、文章配图）本质都是"发布"，
+	// 对只读账号一律挡住，否则存储会先被灌满。
+	scene := strings.TrimSpace(c.PostForm("scene"))
+	if scene != string(storage.SceneAvatar) && !RequireSpeak(c) {
+		return
+	}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		response.Fail(c, errcode.ErrFileMissing.WithMsg("请选择要上传的文件（表单字段名应为 file）"))
 		return
 	}
 
-	result, err := h.uploads.Upload(c.Request.Context(), c.PostForm("scene"), file)
+	result, err := h.uploads.Upload(c.Request.Context(), scene, file)
 	if err != nil {
 		response.Fail(c, err)
 		return

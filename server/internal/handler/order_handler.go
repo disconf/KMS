@@ -46,6 +46,11 @@ func (h *OrderHandler) CreateQuestion(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
+	// 悬赏也是"对外发布"：它会被推进接单大厅，专家据此接单。
+	// 只读账号能挂单等于用一个空壳账号把专家钓过去，所以和提问/投稿同一道闸。
+	if !RequireSpeak(c) {
+		return
+	}
 	var req dto.QuestionCreateReq
 	if !BindJSON(c, &req) {
 		return

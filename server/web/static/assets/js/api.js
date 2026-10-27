@@ -55,6 +55,17 @@ export function currentUser() { return session ? session.user : null; }
 export function isLoggedIn() { return Boolean(session && session.accessToken); }
 
 /**
+ * 会话快照 / 还原。只给自动化脚本用（render_check 要在多个账号之间来回跑）。
+ *
+ * api.js 只有一个令牌槽，换账号必须重新登录；而验证码有 60 秒间隔，
+ * 一条自检要来回切两三个账号就会白等好几分钟。快照里装的是本来就已经
+ * 下发给本页面的令牌，不做任何权限提升：能拿到它的人本来就已经登录了。
+ * 业务代码不该用这两个函数——页面上的"切换账号"必须走真实登录。
+ */
+export function snapshotSession() { return session ? { ...session } : null; }
+export function restoreSession(snap) { writeSession(snap || null); }
+
+/**
  * 当前登录者是不是管理员。
  *
  * 只用来决定「要不要显示后台入口」，不是权限判断——真正的拦截在后端中间件里。
@@ -210,6 +221,66 @@ export function sendSMSCode(phone, scene = 'login') {
   return request('POST', '/auth/sms/send', { body: { phone, scene }, auth: false });
 }
 
+/** 发送邮箱验证码。scene 取 register（注册）或 login（登录）。 */
+export function sendEmailCode(email, scene = 'login') {
+  return request('POST', '/auth/email/send', { body: { email, scene }, auth: false });
+}
+
+/** 邮箱注册。注册出来的账号默认只读，需要实名申请才能发言。 */
+export async function registerByEmail(email, code, password, nickname) {
+  const data = await request('POST', '/auth/register', {
+    body: { email, code, password, nickname: nickname || undefined },
+    auth: false,
+  });
+  writeSession({
+    accessToken: data.token.accessToken,
+    refreshToken: data.token.refreshToken,
+    user: data.user,
+  });
+  return data;
+}
+
+/** 邮箱 + 密码登录。失败文案统一由服务端给，前端不要补充细节。 */
+export async function loginByEmail(email, password) {
+  const data = await request('POST', '/auth/login/email', {
+    body: { email, password },
+    auth: false,
+  });
+  writeSession({
+    accessToken: data.token.accessToken,
+    refreshToken: data.token.refreshToken,
+    user: data.user,
+  });
+  return data;
+}
+
+/** 邮箱 + 验证码登录。 */
+export async function loginByEmailCode(email, code) {
+  const data = await request('POST', '/auth/login/email-code', {
+    body: { email, code },
+    auth: false,
+  });
+  writeSession({
+    accessToken: data.token.accessToken,
+    refreshToken: data.token.refreshToken,
+    user: data.user,
+  });
+  return data;
+}
+
+/**
+ * 当前账号能否发布内容。
+ *
+ * 以服务端算好的 canSpeak 为准，前端不再自己拼 role/speakStatus：
+ * 判断逻辑一旦分叉，就会出现"按钮能点、点了报 403"的体验。
+ * 未登录或无资料时按不能发言处理。
+ */
+export function canSpeak() {
+  const u = currentUser();
+  if (!u) return false;
+  return Boolean(u.canSpeak);
+}
+
 export async function loginBySMS(phone, code, nickname) {
   const data = await request('POST', '/auth/login/sms', {
     body: { phone, code, nickname: nickname || undefined },
@@ -355,6 +426,12 @@ export const api = {
   // 合成一个联合体后服务端和前端都要写一堆分支去猜类型。
   contributeQuiz:   (payload) => post('/quiz/contribute', payload),
   myQuizContributions: (query) => get('/quiz/my/contributions' + qs(query)),
+
+  /* 发言权限（实名申请） */
+  // 只读账号点任何发布按钮前都要先看一眼这个状态，
+  // 缺了它用户只能靠撞 403 才知道自己不能发。
+  speakState: () => get('/me/speak-apply'),
+  applySpeak: (payload) => post('/me/speak-apply', payload),
 
   /* 问答广场 */
   // 游客可读：问答是搜索引擎最常落地的页面，拦在登录后面等于放弃这块流量。
@@ -514,6 +591,10 @@ export const api = {
   adminUser:        (id) => get(`/admin/users/${encodeURIComponent(id)}`),
   adminUserStatus:  (id, payload) => post(`/admin/users/${encodeURIComponent(id)}/status`, payload),
   adminUserRole:    (id, payload) => post(`/admin/users/${encodeURIComponent(id)}/role`, payload),
+
+  // 发言权限审核。通过即放开该账号的发布能力；驳回必须写原因。
+  adminSpeakApplications: (query) => get('/admin/speak-applications' + qs(query)),
+  adminSpeakReview: (userId, payload) => post(`/admin/speak-applications/${encodeURIComponent(userId)}/review`, payload),
 
   // 财务对账。只读：报表不能改数，发现不平要去改真实记录。
   adminFinanceReport: (query) => get('/admin/finance/reconciliation' + qs(query)),

@@ -108,6 +108,22 @@ def first_skill_id():
     return str(items[0]["id"] if isinstance(items[0], dict) else items[0])
 
 
+def grant_speak(token, uid, phone=""):
+    """把演练账号从"只读"提升到"可发言"。
+
+    注册出来（含短信首登自动建号）的账号一律只读：悬赏是对外发布，
+    会被推进接单大厅，所以 CreateQuestion 会先过发言权限，只读会拿到 20026。
+    演练里补上这两步不是在绕规则，而是把规则本身走一遍。
+    """
+    call("POST", "/me/speak-apply",
+         {"realName": "演练账号", "contact": phone or "13800007777", "note": "冒烟演练"},
+         token=token, expect=200, label="提交实名申请")
+    admin_token, _ = login("13800000000")
+    call("POST", f"/admin/speak-applications/{uid}/review",
+         {"approve": True, "note": "冒烟演练放行"}, token=admin_token,
+         expect=200, label="审核通过发言申请")
+
+
 def create_question(token, title, skill_id, budget=20000):
     _, p = call("POST", "/questions", {
         "title": title,
@@ -168,6 +184,7 @@ user_token, user = login("13800007777", "运维老王")
 expert_token, expert = login("13900000001")
 skill_id = first_skill_id()
 print(f"     下单人 id={user['id']} 专家 id={expert['id']} 技能 {skill_id!r}")
+grant_speak(user_token, user["id"], "13800007777")
 
 print("--- 2. 待支付超时：应被自动关单 ---")
 no_a = create_question(user_token, "超时关单验证：节点 NotReady", skill_id)

@@ -61,6 +61,20 @@ if [ -z "${SEED_ADMIN_PASSWORD:-}" ]; then
   echo "[env] SEED_ADMIN_PASSWORD 未设置，已随机生成并写回 .env"
 fi
 
+# ------------------------------------------------------------- 邮件 --
+# 邮箱验证码是注册与邮箱登录的唯一通道。缺配置不算部署失败（站点照常可读），
+# 但注册接口会返回 501，所以必须在末尾显式提示，别等用户来报"收不到验证码"。
+if [ "${MAIL_PROVIDER:-mock}" = "smtp" ]; then
+  if [ -z "${MAIL_SMTP_HOST:-}" ] || [ -z "${MAIL_SMTP_FROM:-}" ]; then
+    echo "[mail] 警告：MAIL_PROVIDER=smtp 但 MAIL_SMTP_HOST / MAIL_SMTP_FROM 为空，"
+    echo "       注册与邮箱登录将返回 501。补齐后 docker compose up -d api 生效。"
+  else
+    echo "[mail] SMTP：${MAIL_SMTP_HOST}:${MAIL_SMTP_PORT:-465}（发件人 ${MAIL_SMTP_FROM}）"
+  fi
+else
+  echo "[mail] 未配置真实邮件通道（MAIL_PROVIDER=${MAIL_PROVIDER:-未设置}），注册功能关闭"
+fi
+
 # ------------------------------------------------------------- config --
 if [ ! -f config.yaml ]; then
   sed -e "s|__DOMAIN__|${APP_DOMAIN:-$DOMAIN_DEFAULT}|g" \

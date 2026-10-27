@@ -32,7 +32,7 @@ func qaViewer(c *gin.Context) service.QaViewer {
 	if !ok {
 		return service.QaViewer{}
 	}
-	return service.QaViewer{UserID: id.UserID, Role: id.Role, ExpertStatus: id.ExpertStatus}
+	return service.QaViewer{UserID: id.UserID, Role: id.Role, ExpertStatus: id.ExpertStatus, SpeakStatus: id.SpeakStatus}
 }
 
 // List 问题列表。

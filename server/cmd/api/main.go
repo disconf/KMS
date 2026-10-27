@@ -28,6 +28,7 @@ import (
 	"github.com/opsexpert/platform/internal/router"
 	"github.com/opsexpert/platform/internal/scheduler"
 	"github.com/opsexpert/platform/internal/service"
+	"github.com/opsexpert/platform/internal/service/mailer"
 	"github.com/opsexpert/platform/internal/service/payment"
 	"github.com/opsexpert/platform/internal/service/sms"
 	"github.com/opsexpert/platform/internal/service/wechat"
@@ -117,6 +118,17 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	mailProvider, err := mailer.New(cfg.Mail)
+	if err != nil {
+		return err
+	}
+	if !cfg.Mail.Configured() {
+		// 邮件没配好不阻断启动（理由见 config.Validate 里的说明），
+		// 但必须让它在启动日志里显眼地出现一次，否则上线后
+		// "为什么注册一直 501"要靠翻代码才能回答。
+		slog.Warn("邮件通道未配置，邮箱注册/登录验证码不可用",
+			"provider", cfg.Mail.Provider, "hint", "设置 MAIL_PROVIDER=smtp 与 MAIL_SMTP_* 后重启")
+	}
 	wechatProvider := wechat.New(cfg.Wechat)
 
 	// 装配依赖链：repository → service → handler（由 router 内部完成）。
@@ -138,7 +150,7 @@ func run() error {
 	tokenStore := tokenstore.New(c)
 
 	authSvc := service.NewAuthService(
-		userRepo, expertRepo, c, tokenStore, jwtMgr, smsProvider, wechatProvider, cfg,
+		userRepo, expertRepo, c, tokenStore, jwtMgr, smsProvider, wechatProvider, mailProvider, cfg,
 	)
 	// 积分仓储同时被文章（教程过审）与问答（采纳/点赞）使用，
 	// 所以先建一份，两边共用。
@@ -233,6 +245,7 @@ func run() error {
 		Finance:   financeSvc,
 		Settings:  settingSvc,
 		Skills:    skillAdminSvc,
+		Speak:     service.NewSpeakService(userRepo, repository.NewAuditRepo(db)),
 	})
 
 	// 三个周期任务都关乎"钱"或"名额"，缺一个就会有单子烂在库里：

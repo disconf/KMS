@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // 用户角色。
 const (
@@ -15,6 +18,19 @@ const (
 	UserStatusDisabled = "disabled" // 已封禁
 )
 
+// 发言权限状态。
+//
+// 与 role 分开而不是塞进 role：role 决定"你是谁"（普通用户/专家/运营），
+// speak_status 决定"你现在能不能说话"。两者维度不同——
+// 一个 role=user 的账号通过实名审核后依然是普通用户，只是不再只读；
+// 管理员把某人降为只读，也不该动他的角色。
+const (
+	SpeakNone     = "none"     // 只读（新注册账号的默认状态）
+	SpeakPending  = "pending"  // 已提交实名申请，待审
+	SpeakApproved = "approved" // 可发言
+	SpeakRejected = "rejected" // 申请被驳回，可重新提交
+)
+
 // User 平台账号。
 //
 // Phone / WxOpenID 均为可空：微信登录可以先只带 openid 建号，之后再绑手机号；
@@ -27,12 +43,34 @@ type User struct {
 	WxOpenID  string  `gorm:"size:64;index;comment:微信 openid" json:"-"`
 	WxUnionID string  `gorm:"size:64;index;comment:微信 unionid" json:"-"`
 
+	// Email 邮箱，注册与登录的主凭据。
+	//
+	// 和 Phone 一样用指针：唯一索引下 MySQL/SQLite 都允许多个 NULL，
+	// 却不允许多个空串。历史数据里的 email 全是 ''，所以迁移时
+	// 必须先把空串转成 NULL，否则唯一索引根本建不出来。
+	Email *string `gorm:"size:128;uniqueIndex;comment:邮箱" json:"email,omitempty"`
+
+	// EmailVerifiedAt 邮箱验证通过时间。空值表示未验证，不能登录。
+	EmailVerifiedAt *time.Time `gorm:"comment:邮箱验证时间" json:"-"`
+
 	Nickname string `gorm:"size:64;comment:昵称" json:"nickname"`
 	Avatar   string `gorm:"size:512;comment:头像地址" json:"avatar"`
-	Email    string `gorm:"size:128;comment:邮箱" json:"email"`
 
 	Role   string `gorm:"size:16;index;default:user;comment:角色 user/expert/admin" json:"role"`
 	Status string `gorm:"size:16;index;default:active;comment:状态 active/disabled" json:"status"`
+
+	// SpeakStatus 发言权限：none 只读 / pending 待审 / approved 可发言 / rejected 被驳回。
+	SpeakStatus string `gorm:"size:16;index;default:none;comment:发言权限状态" json:"speakStatus"`
+
+	// 实名申请留痕。只存姓名与联系方式，不存身份证号：
+	// 身份证是强 PII，一旦落库就要跟着做加密、脱敏、审计、删除请求，
+	// 而这里的目的只是"确认说话的是个真人"，姓名+联系方式足够。
+	SpeakRealName   string     `gorm:"size:32;comment:申请时填写的真实姓名" json:"-"`
+	SpeakContact    string     `gorm:"size:64;comment:申请时填写的联系方式" json:"-"`
+	SpeakApplyNote  string     `gorm:"size:255;comment:申请理由" json:"-"`
+	SpeakAppliedAt  *time.Time `gorm:"comment:申请提交时间" json:"speakAppliedAt,omitempty"`
+	SpeakReviewedAt *time.Time `gorm:"comment:申请审核时间" json:"-"`
+	SpeakReviewNote string     `gorm:"size:255;comment:审核备注/驳回原因" json:"speakReviewNote,omitempty"`
 
 	// 封禁留痕。原因必须落库：半年后有人来申诉，只看到 status=disabled
 	// 却没人说得清当初为什么封，结果往往是先解封再说——等于封禁白做。
@@ -72,6 +110,55 @@ func (u *User) PhoneValue() string {
 
 // HasPhone 判断是否已绑定手机号。
 func (u *User) HasPhone() bool { return u.PhoneValue() != "" }
+
+// EmailValue 返回邮箱明文，未绑定时返回空串。
+func (u *User) EmailValue() string {
+	if u.Email == nil {
+		return ""
+	}
+	return *u.Email
+}
+
+// EmailVerified 判断邮箱是否已验证。
+func (u *User) EmailVerified() bool { return u.EmailVerifiedAt != nil }
+
+// CanSpeak 判断当前账号是否有发布内容的资格。
+//
+// 管理员与专家天然可发言——他们本身就是审核链的一环，
+// 专家更是经过入驻审核的（姓名、资质、定价都审过），
+// 不该再走一遍"实名申请"。
+// 其余账号一律看 speak_status，默认 none 即只读。
+func (u *User) CanSpeak() bool {
+	if u.Role == RoleAdmin || u.Role == RoleExpert {
+		return true
+	}
+	return u.SpeakStatus == SpeakApproved
+}
+
+// ValidSpeakStatus 判断发言状态取值是否在白名单内。
+func ValidSpeakStatus(s string) bool {
+	switch s {
+	case SpeakNone, SpeakPending, SpeakApproved, SpeakRejected:
+		return true
+	}
+	return false
+}
+
+// MaskedEmail 返回脱敏邮箱，用于后台列表与日志。
+func (u *User) MaskedEmail() string { return MaskEmail(u.EmailValue()) }
+
+// MaskEmail 脱敏邮箱：保留首字符与域名，中间用 *** 代替。
+func MaskEmail(email string) string {
+	at := strings.IndexByte(email, '@')
+	if at <= 0 {
+		return email
+	}
+	local := email[:at]
+	if len(local) <= 1 {
+		return "***" + email[at:]
+	}
+	return local[:1] + "***" + email[at:]
+}
 
 // IsActive 判断账号是否可用。
 func (u *User) IsActive() bool { return u.Status == UserStatusActive }

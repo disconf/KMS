@@ -20,6 +20,7 @@
 import { api, isLoggedIn, ApiError } from './api.js';
 import { esc, fmtNum, fmtDate, icon, setHashQuery, splitTags } from './util.js';
 import { bindPager, emptyHTML, pagerHTML, toastError, toastOk } from './ui.js';
+import { speakGateOrNull } from './auth-modal.js';
 
 const PAGE_SIZE = 10;
 
@@ -57,6 +58,13 @@ export async function contributePage(ctx) {
       title: '内容投稿',
     };
   }
+
+  // 投稿是"写内容"，只读账号一律拦在表单之前。
+  const speakGate = speakGateOrNull('内容投稿', {
+    head: '把你踩过的坑写成可复用的步骤，审核通过后会发布到知识库。',
+    desc: '投稿需要先开通发言权限：通过实名申请后，文章与题目才能进入审核队列。',
+  });
+  if (speakGate) return speakGate;
 
   const kind = ctx.params.get('type') === 'quiz' ? 'quiz' : 'article';
 

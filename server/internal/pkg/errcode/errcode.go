@@ -139,6 +139,26 @@ var (
 	ErrPasswordTooWeak = New(20015, "密码强度不足：至少 8 位且同时包含字母和数字", http.StatusBadRequest)
 	ErrPasswordNotSet  = New(20016, "该账号未设置密码，请使用验证码登录", http.StatusBadRequest)
 	ErrLoginLocked     = New(20017, "密码错误次数过多，请 15 分钟后再试", http.StatusTooManyRequests)
+
+	// 邮箱注册与登录。文案里不区分"邮箱已注册/未注册"以外的细节，
+	// 但注册与登录两条路径的提示必须不同：注册要说清"去登录"，
+	// 否则用户会以为换个邮箱就能重复注册。
+	ErrEmailInvalid      = New(20018, "邮箱格式不正确", http.StatusBadRequest)
+	ErrEmailTaken        = New(20019, "该邮箱已注册，请直接登录", http.StatusConflict)
+	ErrEmailNotVerified  = New(20020, "请先完成邮箱验证", http.StatusForbidden)
+	ErrEmailCodeInvalid  = New(20021, "邮箱验证码不正确", http.StatusBadRequest)
+	ErrEmailSendTooFast  = New(20022, "验证码已发送，请稍后再试", http.StatusTooManyRequests)
+	ErrEmailDailyLimit   = New(20023, "今日邮件发送次数已达上限", http.StatusTooManyRequests)
+	ErrMailNotConfigured = New(20024, "邮件服务未配置，暂时无法注册，请联系管理员", http.StatusNotImplemented)
+	ErrRegisterDisabled  = New(20025, "注册通道已关闭", http.StatusForbidden)
+
+	// 发言权限。只读账号点任何"发布"按钮都会撞到这条，
+	// 所以文案必须直接告诉他下一步该干什么。
+	ErrSpeakNotAllowed  = New(20026, "当前账号为只读状态，请先提交实名申请并通过审核", http.StatusForbidden)
+	ErrSpeakApplyDup    = New(20027, "已提交申请，请等待审核", http.StatusConflict)
+	ErrSpeakApplyState  = New(20028, "该申请已审核完成，不可重复审核", http.StatusConflict)
+	ErrSpeakApplyAbsent = New(20029, "请先提交实名申请", http.StatusForbidden)
+	ErrSpeakApplyNote   = New(20030, "请填写申请理由", http.StatusBadRequest)
 )
 
 // ============================ 用户与专家 3xxxx ============================
@@ -337,6 +357,9 @@ var (
 	ErrDatabase   = New(90001, "数据服务异常，请稍后重试", http.StatusInternalServerError)
 	ErrCache      = New(90002, "缓存服务异常，请稍后重试", http.StatusInternalServerError)
 	ErrThirdParty = New(90003, "第三方服务异常，请稍后重试", http.StatusBadGateway)
+	// ErrMailSendFailed 发信失败。文案不带 SMTP 细节：
+	// 里面可能含收件地址与中继账号，回给前端等于泄露。
+	ErrMailSendFailed = New(90004, "邮件发送失败，请稍后重试或联系管理员", http.StatusBadGateway)
 )
 
 // From 把任意 error 归一为 *Error；未知错误一律按内部错误处理，避免细节外泄。

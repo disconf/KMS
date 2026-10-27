@@ -4,8 +4,9 @@
 
 import {
   api, onAuthChange, currentUser, isLoggedIn,
-  loginBySMS, loginByPassword, logout, sendSMSCode, changePassword, refreshProfile, ApiError,
+  logout, changePassword, refreshProfile, ApiError,
 } from './api.js';
+import { openAuthModal } from './auth-modal.js';
 import { esc, icon, delegate } from './util.js';
 import { bindError, closeModal, emptyHTML, errorHTML, loadingHTML, openModal, toastError, toastOk } from './ui.js';
 import { homePage } from './pages-home.js';
@@ -18,6 +19,7 @@ import { orderDetailPage, orderListPage } from './pages-orders.js';
 import { questionNewPage } from './pages-question.js';
 import { hallPage } from './pages-hall.js';
 import { contributePage, myContributionsPage } from './pages-contribute.js';
+import { mePage } from './pages-me.js';
 import { qaListPage, qaAskPage, qaDetailPage } from './pages-qa.js';
 import { FLAGS } from './flags.js';
 import {
@@ -29,6 +31,7 @@ import {
   adminToolsPage, adminToolGuidesPage, adminToolBooksPage,
   adminResourcesPage, adminResourceLinksPage,
   adminQuizPage, adminExpertsPage, adminWithdrawalsPage, adminOrdersPage, adminUsersPage,
+  adminSpeakApplicationsPage,
   adminFinancePage, adminSettingsPage, adminQaPage,
 } from './pages-admin.js';
 import { initSearchBox } from './searchbox.js';
@@ -82,6 +85,7 @@ const ROUTES = [
   { re: /^\/qa\/ask$/,            page: (ctx) => qaAskPage(ctx) },
   { re: /^\/qa\/([^/]+)$/,        page: (ctx, m) => qaDetailPage(ctx, decodeSegment(m[1])) },
 
+  { re: /^\/me$/,                page: (ctx) => mePage(ctx) },
   { re: /^\/contribute$/,        page: (ctx) => contributePage(ctx) },
   { re: /^\/me\/contributions$/, page: (ctx) => myContributionsPage(ctx) },
 
@@ -117,6 +121,7 @@ const ROUTES = [
   { re: /^\/admin\/withdrawals$/,              page: (ctx) => adminWithdrawalsPage(ctx) },
   { re: /^\/admin\/orders$/,                   page: (ctx) => adminOrdersPage(ctx) },
   { re: /^\/admin\/users$/,                    page: (ctx) => adminUsersPage(ctx) },
+  { re: /^\/admin\/speak$/,                    page: (ctx) => adminSpeakApplicationsPage(ctx) },
   { re: /^\/admin\/finance$/,                  page: (ctx) => adminFinancePage(ctx) },
   { re: /^\/admin\/settings$/,                 page: (ctx) => adminSettingsPage(ctx) },
 ];
@@ -385,9 +390,9 @@ function renderNav(path) {
   items.push(navItemHTML({ name: '投稿', href: '#/contribute', active: path === '/contribute' }));
   if (isLoggedIn()) {
     items.push(navItemHTML({
-      name: '我的投稿',
-      href: '#/me/contributions',
-      active: path === '/me/contributions',
+      name: '我的',
+      href: '#/me',
+      active: path === '/me' || path.startsWith('/me/'),
     }));
   }
 
@@ -572,7 +577,9 @@ function renderAccount() {
     return;
   }
 
-  const name = user.nickname || user.phone || '已登录';
+  // 邮箱注册的账号没有手机号，取名字的顺序要把 email 也排进去，
+  // 否则顶栏会显示成一句"已登录"——用户看不出登的是哪个号。
+  const name = user.nickname || user.email || user.phone || '已登录';
   // 后台入口只摆在账号区，不占读者导航：顶栏那一排是"看什么内容"，
   // 后台是另一套信息架构，混进去会让普通读者也看见"审核队列"。
   const adminEntry = user.role === 'admin'
@@ -589,7 +596,7 @@ function renderAccount() {
     ? `<a class="btn btn-sm admin-entry" href="#/expert" title="专家工作台">${icon('activity', 14)}工作台</a>`
     : '';
   box.innerHTML = `
-    <div class="user-chip" title="${esc(user.phone || '')}">
+    <div class="user-chip" title="${esc(user.email || user.phone || '')}">
       <span class="avatar">${esc(String(name)[0].toUpperCase())}</span>
       <span class="name">${esc(name)}</span>
     </div>
@@ -610,180 +617,14 @@ async function doLogout() {
 
 /* --------------------------------------------------------- 登录弹窗 -- */
 
+// 弹窗本体搬到了 auth-modal.js：登录/注册 × 邮箱/手机号 × 密码/验证码
+// 四组组合放这里会把路由入口淹掉。这里只保留"登录成功后要刷新什么"。
 function openLoginModal() {
-  if (isLoggedIn()) return;
-
-  openModal(`
-    <div class="modal-head">
-      <div>
-        <h2>登录</h2>
-        <p id="login-sub">手机号验证码登录，首次登录会自动创建账号。</p>
-      </div>
-    </div>
-    <div class="modal-body">
-      <div class="field">
-        <label for="login-phone">手机号</label>
-        <input class="input" id="login-phone" type="tel" inputmode="numeric"
-               maxlength="11" placeholder="11 位手机号" autocomplete="tel" />
-      </div>
-      <div class="field" id="login-code-field">
-        <label for="login-code">验证码</label>
-        <div style="display:flex;gap:8px">
-          <input class="input" id="login-code" type="text" inputmode="numeric"
-                 maxlength="6" placeholder="6 位数字" autocomplete="one-time-code" />
-          <button class="btn" id="login-send" type="button" style="flex:0 0 auto;height:38px;min-width:104px">
-            获取验证码
-          </button>
-        </div>
-      </div>
-      <div class="field" id="login-password-field" hidden>
-        <label for="login-password">密码</label>
-        <input class="input" id="login-password" type="password" maxlength="64"
-               placeholder="登录密码" autocomplete="current-password" />
-      </div>
-      <p id="login-tip" style="font-size:12.5px;color:var(--text-3);min-height:19px;line-height:1.5"></p>
-      <button class="btn btn-primary btn-block btn-lg" id="login-submit" type="button">登录</button>
-      <p style="text-align:center;margin:14px 0 0">
-        <button type="button" id="login-switch"
-          style="background:none;border:0;padding:0;cursor:pointer;font-size:13px;color:var(--brand)">
-          管理员密码登录
-        </button>
-      </p>
-    </div>
-  `, (modal) => {
-    const phoneInput = modal.querySelector('#login-phone');
-    const codeInput = modal.querySelector('#login-code');
-    const sendBtn = modal.querySelector('#login-send');
-    const submitBtn = modal.querySelector('#login-submit');
-    const tip = modal.querySelector('#login-tip');
-    const sub = modal.querySelector('#login-sub');
-    const codeField = modal.querySelector('#login-code-field');
-    const pwdField = modal.querySelector('#login-password-field');
-    const pwdInput = modal.querySelector('#login-password');
-    const switchBtn = modal.querySelector('#login-switch');
-
-    // 两种模式共用同一个弹窗：验证码是默认路径（普通用户），
-    // 密码是给已设密码的管理员用的，切换时只换字段不重开弹窗，
-    // 已输入的手机号不会丢。
-    let mode = 'sms';
-
-    const applyMode = (next) => {
-      mode = next;
-      const byPwd = mode === 'password';
-      codeField.hidden = byPwd;
-      pwdField.hidden = !byPwd;
-      sub.textContent = byPwd
-        ? '使用手机号与密码登录，仅限已设置密码的后台账号。'
-        : '手机号验证码登录，首次登录会自动创建账号。';
-      switchBtn.textContent = byPwd ? '改用验证码登录' : '管理员密码登录';
-      setTip('');
-      if (byPwd) pwdInput.focus(); else codeInput.focus();
-    };
-
-    const setTip = (text, tone = 'muted') => {
-      tip.textContent = text;
-      tip.style.color = tone === 'error' ? 'var(--danger)'
-        : tone === 'ok' ? 'var(--ok)'
-        : 'var(--text-3)';
-    };
-
-    let countdown = 0;
-    let timer = 0;
-    const startCountdown = (seconds) => {
-      countdown = seconds;
-      clearInterval(timer);
-      const tick = () => {
-        sendBtn.textContent = `${countdown} 秒后重发`;
-        sendBtn.disabled = countdown > 0;
-        if (countdown <= 0) {
-          clearInterval(timer);
-          sendBtn.textContent = '获取验证码';
-        }
-        countdown -= 1;
-      };
-      tick();
-      timer = setInterval(tick, 1000);
-    };
-
-    const validPhone = () => /^1[3-9]\d{9}$/.test(phoneInput.value.trim());
-
-    sendBtn.addEventListener('click', async () => {
-      const phone = phoneInput.value.trim();
-      if (!validPhone()) {
-        setTip('请输入正确的 11 位手机号', 'error');
-        phoneInput.focus();
-        return;
-      }
-      sendBtn.disabled = true;
-      setTip('正在发送…');
-      try {
-        const res = await sendSMSCode(phone);
-        if (res && res.devCode) {
-          // 开发环境服务端会把验证码回传，直接填好省一步
-          codeInput.value = res.devCode;
-          setTip(`开发模式：验证码 ${res.devCode} 已自动填入`, 'ok');
-          codeInput.focus();
-        } else {
-          setTip(`已发送，${res && res.expiresIn ? Math.round(res.expiresIn / 60) + ' 分钟内有效' : '请查看短信'}`);
-        }
-        startCountdown((res && res.interval) || 60);
-      } catch (err) {
-        sendBtn.disabled = false;
-        setTip(err instanceof ApiError ? err.message : '发送失败，请稍后再试', 'error');
-      }
-    });
-
-    const submit = async () => {
-      const phone = phoneInput.value.trim();
-      if (!validPhone()) { setTip('请输入正确的 11 位手机号', 'error'); phoneInput.focus(); return; }
-
-      if (mode === 'password') {
-        const password = pwdInput.value;
-        if (!password) { setTip('请输入登录密码', 'error'); pwdInput.focus(); return; }
-        submitBtn.disabled = true;
-        submitBtn.textContent = '登录中…';
-        try {
-          await loginByPassword(phone, password);
-          closeModal();
-          toastOk('登录成功');
-          await reloadChannels();
-          await route();
-        } catch (err) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = '登录';
-          setTip(err instanceof ApiError ? err.message : '登录失败，请稍后再试', 'error');
-          pwdInput.focus();
-        }
-        return;
-      }
-
-      const code = codeInput.value.trim();
-      if (!/^\d{4,6}$/.test(code)) { setTip('请输入收到的验证码', 'error'); codeInput.focus(); return; }
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = '登录中…';
-      try {
-        await loginBySMS(phone, code);
-        clearInterval(timer);
-        closeModal();
-        toastOk('登录成功');
-        await reloadChannels();
-        await route();
-      } catch (err) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = '登录';
-        setTip(err instanceof ApiError ? err.message : '登录失败，请稍后再试', 'error');
-      }
-    };
-
-    submitBtn.addEventListener('click', submit);
-    switchBtn.addEventListener('click', () => applyMode(mode === 'sms' ? 'password' : 'sms'));
-    codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
-    pwdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
-    phoneInput.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      if (mode === 'password') submit(); else sendBtn.click();
-    });
+  openAuthModal({
+    onSuccess: async () => {
+      await reloadChannels();
+      await route();
+    },
   });
 }
 

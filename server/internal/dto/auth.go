@@ -4,9 +4,45 @@ import "time"
 
 // 验证码使用场景。
 const (
-	SceneLogin = "login" // 登录
-	SceneBind  = "bind"  // 绑定手机号
+	SceneLogin    = "login"    // 登录
+	SceneBind     = "bind"     // 绑定手机号
+	SceneRegister = "register" // 邮箱注册
 )
+
+// ValidMailScene 判断邮件验证码场景是否合法。
+func ValidMailScene(scene string) bool {
+	return scene == SceneLogin || scene == SceneRegister || scene == SceneBind
+}
+
+// SendEmailCodeReq 发送邮箱验证码。
+type SendEmailCodeReq struct {
+	Email string `json:"email" binding:"required" example:"me@example.com"`
+	Scene string `json:"scene" binding:"omitempty,oneof=login bind register" example:"register"`
+}
+
+// RegisterEmailReq 邮箱注册：邮箱 + 验证码 + 自设密码。
+//
+// 不设"确认密码"字段：那是给手滑留的保险，前端做一次比对即可，
+// 后端再要一遍只是多一个能填错的字段。
+type RegisterEmailReq struct {
+	Email    string `json:"email" binding:"required" example:"me@example.com"`
+	Code     string `json:"code" binding:"required" example:"123456"`
+	Password string `json:"password" binding:"required,min=8,max=64" example:"MyPass1234"`
+	// Nickname 可选，留空取邮箱前缀
+	Nickname string `json:"nickname" example:"老王"`
+}
+
+// LoginEmailReq 邮箱 + 密码登录。
+type LoginEmailReq struct {
+	Email    string `json:"email" binding:"required" example:"me@example.com"`
+	Password string `json:"password" binding:"required,max=64" example:"MyPass1234"`
+}
+
+// LoginEmailCodeReq 邮箱 + 验证码登录。
+type LoginEmailCodeReq struct {
+	Email string `json:"email" binding:"required" example:"me@example.com"`
+	Code  string `json:"code" binding:"required" example:"123456"`
+}
 
 // SendSMSCodeReq 发送短信验证码。
 type SendSMSCodeReq struct {
@@ -102,4 +138,13 @@ type UserProfile struct {
 	Role         string    `json:"role"`
 	ExpertStatus string    `json:"expertStatus,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
+
+	// SpeakStatus 决定前端要不要把"发布"按钮变成"申请发言"。
+	// 放在 profile 里而不是单独接口：每个页面都要据此渲染，
+	// 多一次请求换不来什么，反而多一个可能失败的依赖。
+	SpeakStatus     string     `json:"speakStatus"`
+	SpeakReviewNote string     `json:"speakReviewNote,omitempty"`
+	SpeakAppliedAt  *time.Time `json:"speakAppliedAt,omitempty"`
+	// CanSpeak 是服务端算好的最终结论，前端不用自己拼角色与状态。
+	CanSpeak bool `json:"canSpeak"`
 }

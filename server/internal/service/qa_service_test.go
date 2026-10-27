@@ -54,6 +54,14 @@ func newQaFixture(t *testing.T) *qaFixture {
 	users := repository.NewUserRepo(db)
 	mk := func(phone, nick, role string) int64 {
 		u := &model.User{Phone: model.StrPtr(phone), Nickname: nick, Role: role, Status: model.UserStatusActive}
+		// 普通用户默认只读（要实名申请才能发言）。这个夹具里的人物都是"已经在
+		// 正常使用的老用户"，所以直接给通过状态；"只读被拦住"那一路由
+		// auth_email_test.go 走完整的注册→申请→审核链路覆盖，不在这里重复。
+		if role == model.RoleUser {
+			u.SpeakStatus = model.SpeakApproved
+			u.SpeakRealName = nick
+			u.SpeakContact = phone
+		}
 		require.NoError(t, users.Create(ctx, u))
 		return u.ID
 	}
@@ -81,14 +89,20 @@ func newQaFixture(t *testing.T) *qaFixture {
 
 func (f *qaFixture) ask(t *testing.T, userID int64, title string) *dto.QaQuestionItem {
 	t.Helper()
-	item, err := f.svc.Ask(context.Background(), QaViewer{UserID: userID, Role: model.RoleUser},
+	item, err := f.svc.Ask(context.Background(), viewerOf(model.RoleUser, userID),
 		dto.QaAskReq{Title: title, Description: "这是一段足够长的正文，用来通过最短长度校验。"})
 	require.NoError(t, err)
 	return item
 }
 
 func viewerOf(role string, id int64) QaViewer {
-	return QaViewer{UserID: id, Role: role}
+	v := QaViewer{UserID: id, Role: role}
+	// 与 handler 的填法保持一致：普通用户能不能发言看 speak_status，
+	// 这里造的普通用户都已经通过实名申请。
+	if role == model.RoleUser {
+		v.SpeakStatus = model.SpeakApproved
+	}
+	return v
 }
 
 func TestQaNewUserAnswersNeedReview(t *testing.T) {

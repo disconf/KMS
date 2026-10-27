@@ -54,6 +54,9 @@ type AdminUserItem struct {
 	StatusReason    string     `json:"statusReason"`
 	StatusChangedAt *time.Time `json:"statusChangedAt"`
 
+	// SpeakStatus 发言权限状态，后台一眼看出"这个人为啥不能发帖"。
+	SpeakStatus string `json:"speakStatus"`
+
 	// ExpertID > 0 表示这个人有专家档案；ExpertStatus 为审核状态。
 	ExpertID     int64  `json:"expertId"`
 	ExpertStatus string `json:"expertStatus"`

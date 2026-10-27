@@ -86,7 +86,95 @@ func (h *AuthHandler) LoginByPassword(c *gin.Context) {
 	response.OK(c, resp)
 }
 
-// WechatAuthURL 获取微信授权跳转地址。
+// SendEmailCode 发送邮箱验证码。
+//
+//	@Summary  发送邮箱验证码
+//	@Tags     auth
+//	@Accept   json
+//	@Produce  json
+//	@Param    body body dto.SendEmailCodeReq true "邮箱与场景"
+//	@Success  200 {object} response.Body
+//	@Router   /auth/email/send [post]
+func (h *AuthHandler) SendEmailCode(c *gin.Context) {
+	var req dto.SendEmailCodeReq
+	if !BindJSON(c, &req) {
+		return
+	}
+	resp, err := h.auth.SendEmailCode(c.Request.Context(), req)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, resp)
+}
+
+// RegisterByEmail 邮箱注册，注册出来的账号默认为只读。
+//
+//	@Summary  邮箱注册
+//	@Tags     auth
+//	@Accept   json
+//	@Produce  json
+//	@Param    body body dto.RegisterEmailReq true "邮箱、验证码与密码"
+//	@Success  200 {object} response.Body
+//	@Router   /auth/register [post]
+func (h *AuthHandler) RegisterByEmail(c *gin.Context) {
+	var req dto.RegisterEmailReq
+	if !BindJSON(c, &req) {
+		return
+	}
+	resp, err := h.auth.RegisterByEmail(c.Request.Context(), req, c.ClientIP())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, resp)
+}
+
+// LoginByEmail 邮箱 + 密码登录。
+//
+//	@Summary  邮箱密码登录
+//	@Tags     auth
+//	@Accept   json
+//	@Produce  json
+//	@Param    body body dto.LoginEmailReq true "邮箱与密码"
+//	@Success  200 {object} response.Body
+//	@Router   /auth/login/email [post]
+func (h *AuthHandler) LoginByEmail(c *gin.Context) {
+	var req dto.LoginEmailReq
+	if !BindJSON(c, &req) {
+		return
+	}
+	resp, err := h.auth.LoginByEmail(c.Request.Context(), req, c.ClientIP())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, resp)
+}
+
+// LoginByEmailCode 邮箱 + 验证码登录。
+//
+//	@Summary  邮箱验证码登录
+//	@Tags     auth
+//	@Accept   json
+//	@Produce  json
+//	@Param    body body dto.LoginEmailCodeReq true "邮箱与验证码"
+//	@Success  200 {object} response.Body
+//	@Router   /auth/login/email-code [post]
+func (h *AuthHandler) LoginByEmailCode(c *gin.Context) {
+	var req dto.LoginEmailCodeReq
+	if !BindJSON(c, &req) {
+		return
+	}
+	resp, err := h.auth.LoginByEmailCode(c.Request.Context(), req, c.ClientIP())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, resp)
+}
+
+// WechatAuthURL 获取微信授权跳转地址。//
 //
 //	@Summary  获取微信授权地址
 //	@Tags     auth

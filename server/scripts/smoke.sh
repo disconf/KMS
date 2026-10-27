@@ -67,7 +67,9 @@ run_suite() {
   echo
   echo "############ $name（库 $name.db）############"
   "$PYTHON" -u "scripts/$script" "$log" > "$out" 2>&1
-  rc=$?
+  # 变量名别用 rc：run_suite 没有 local，会直接盖掉外面累计失败用的 $rc，
+  # 结果就是某个套件红了、最后一行还打印"冒烟全绿"。
+  suite_rc=$?
 
   kill "$srv" 2>/dev/null
   wait "$srv" 2>/dev/null
@@ -75,7 +77,7 @@ run_suite() {
 
   # 只回显汇总行与失败项，完整输出留在 $out
   grep -E "^\s*\[FAIL\]|^=====|^!!|Traceback" "$out" || echo "  （$name 没有汇总行输出，检查 $out）"
-  return $rc
+  return $suite_rc
 }
 
 rc=0
@@ -89,6 +91,12 @@ run_suite sched smoke_sched.py \
   SCHEDULER_INTERVAL=1s \
   PAYMENT_PAY_TIMEOUT=4s \
   PAYMENT_AUTO_CONFIRM_AFTER=6s || rc=1
+
+# 邮箱注册与发言权限：验证码走 mock 通道 + 回传（真实 SMTP 不该出现在演练里，
+# 否则每跑一次就往别人的邮箱塞几封信，还可能被限流卡住）。
+run_suite auth smoke_auth.py \
+  MAIL_PROVIDER=mock \
+  MAIL_EXPOSE_CODE=true || rc=1
 
 echo
 if [ "$rc" = 0 ]; then

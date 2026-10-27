@@ -2336,3 +2336,118 @@ a.admin-cell-title:hover { color: var(--brand-dark); text-decoration: underline;
 
 /* 功能开关：被 FLAGS 收起的入口（页脚链接等）用这个类摘掉。 */
 .hidden { display: none !important; }
+
+/* ======================================================================
+   ⑫ 注册登录与发言权限
+   —— 认证弹窗 / 我的账号页 / 后台发言申请
+   ====================================================================== */
+
+/* 登录与注册是两件事，做成页签而不是两个入口：
+   新用户找"注册"时习惯性先点"登录"，页签能接住这一步。 */
+.auth-tabs {
+  display: flex; gap: 2px; padding: 3px; margin-bottom: 18px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px;
+}
+.auth-tab {
+  flex: 1 1 0; border: 0; background: none; cursor: pointer;
+  padding: 7px 0; border-radius: 6px;
+  font-size: 13px; color: var(--text-3);
+  transition: background .14s, color .14s;
+}
+.auth-tab:hover { color: var(--text); }
+.auth-tab.is-active {
+  background: var(--surface); color: var(--brand-dark);
+  font-weight: 500; box-shadow: var(--shadow-1);
+}
+
+/* 提示行：跟着操作变化（正在发送 / 已发送 / 出错），所以给固定高度，
+   免得文字的增减把下面的按钮顶上顶下。 */
+.auth-tip {
+  min-height: 18px; margin: 2px 0 12px;
+  font-size: 12.3px; line-height: 1.6; color: var(--text-3);
+}
+
+/* 「用验证码登录 · 改用手机号」这类退路：是文字按钮，不是次按钮。
+   做成按钮会和主按钮抢视觉权重，而它们本来就是少数人才需要点的。 */
+.auth-links {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 14px; font-size: 12.5px; color: var(--text-4);
+}
+.auth-links button {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font-size: 12.5px; color: var(--text-2);
+}
+.auth-links button:hover { color: var(--brand-dark); text-decoration: underline; }
+.auth-sep { color: var(--text-4); }
+
+/* 注册页底部说明"注册后是只读账号"。这段话必须留下：
+   不说清楚，用户注册完点提问只会看到"需要申请"，以为注册没成功。 */
+.auth-note {
+  margin: 14px 0 0; padding: 10px 12px;
+  border-radius: var(--radius); background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  font-size: 12.2px; line-height: 1.75; color: var(--text-2);
+}
+.auth-note strong { color: var(--brand-dark); font-weight: 600; }
+
+/* 选填标记：跟标签同一行，字号小一档，不额外占一行。 */
+.auth-optional { color: var(--text-4); font-weight: 400; }
+
+/* --- 我的账号 --- */
+.me-page { display: grid; gap: 16px; max-width: 760px; }
+.me-card { padding: 20px 22px; }
+.me-card-head {
+  display: flex; align-items: center; gap: 12px;
+  padding-bottom: 16px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.me-avatar {
+  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--brand-soft); border: 1px solid var(--brand-border);
+  color: var(--brand-dark); font-size: 17px; font-weight: 600;
+}
+.me-name {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 600; color: var(--text);
+}
+.me-sub { margin-top: 3px; font-size: 12.5px; color: var(--text-3); }
+
+/* 资料行用两列表格而不是 label 堆叠：一眼能横向对比"邮箱是什么、手机号是什么"。 */
+.me-rows { margin: 0; display: grid; gap: 0; }
+.me-rows > div {
+  display: grid; grid-template-columns: 96px 1fr; gap: 12px;
+  padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.me-rows > div:last-child { border-bottom: 0; }
+.me-rows dt { font-size: 12.5px; color: var(--text-3); }
+.me-rows dd { margin: 0; font-size: 13.2px; color: var(--text); word-break: break-all; }
+.me-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+.me-hint {
+  margin: 0 0 14px; font-size: 13px; line-height: 1.75; color: var(--text-2);
+}
+.me-form { display: grid; gap: 12px; max-width: 420px; }
+.me-form .btn { justify-self: start; }
+
+/* 驳回原因给红条：这是"上次为什么没过"，不是普通提示，必须第一眼看到。 */
+.me-reject {
+  margin: 0 0 14px; padding: 11px 13px; border-radius: var(--radius);
+  background: var(--danger-soft); border: 1px solid #F6C8CE;
+}
+.me-reject strong { display: block; font-size: 12.3px; color: #C01F31; margin-bottom: 4px; }
+.me-reject p { margin: 0; font-size: 12.8px; line-height: 1.7; color: var(--text-2); }
+
+/* --- 后台：申请理由列 --- */
+/* 理由可能一句话也可能一段，给个宽度上限，别让某一列把整张表挤歪。 */
+.admin-cell-note {
+  max-width: 320px; font-size: 12.4px; line-height: 1.7;
+  color: var(--text-2); white-space: normal;
+}
+
+@media (max-width: 720px) {
+  .me-card { padding: 16px; }
+  .me-rows > div { grid-template-columns: 80px 1fr; gap: 8px; }
+  .me-form { max-width: none; }
+}
+

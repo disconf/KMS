@@ -11,9 +11,10 @@
       前端不自己按 userId 比较——那种判断在改了身份模型后必然失准。
    ========================================================================= */
 
-import { api, isLoggedIn, currentUser, ApiError } from './api.js';
+import { api, canSpeak, isLoggedIn, currentUser, ApiError } from './api.js';
 import { esc, fmtRelative, fmtNum, icon, renderMarkdown, setHashQuery } from './util.js';
 import { avatarHTML, bindPager, emptyHTML, pagerHTML, toastError, toastOk } from './ui.js';
+import { speakGateOrNull } from './auth-modal.js';
 
 const PAGE_SIZE = 10;
 
@@ -159,6 +160,12 @@ export async function qaAskPage(ctx) {
       }),
     };
   }
+
+  // 只读账号发文前先实名：问答广场是对外可读的，匿名灌水比投稿更难事后清理。
+  const speakGate = speakGateOrNull('我要提问', {
+    desc: '在问答广场提问需要先开通发言权限，通过实名申请后即可提问与回答。',
+  });
+  if (speakGate) return speakGate;
 
   const skills = await api.skills().catch(() => []);
   const top = (skills || []).slice(0, 24);
@@ -312,6 +319,8 @@ export async function qaDetailPage(ctx, id) {
 
   const meta = STATUS_META[q.status] || STATUS_META.open;
   const canWrite = isLoggedIn();
+  // 只读账号：看得见回答区但写不了。空着比让人写完再被服务端拒掉好。
+  const canAnswer = canWrite && canSpeak();
 
   return {
     title: q.title,
@@ -362,7 +371,7 @@ export async function qaDetailPage(ctx, id) {
               : `<p class="muted-note" style="padding:12px 0">还没有人回答。${canWrite ? '知道答案就写下来吧。' : '登录后可以回答。'}</p>`}
 
             <div class="qa-answer-form">
-              ${canWrite
+              ${canAnswer
                 ? `<h3 class="block-title">${q.myAnswerId ? '编辑我的回答' : '写下你的回答'}</h3>
                    <textarea class="input code-input" id="qa-answer" rows="7"
                      placeholder="说清「为什么」和「怎么验证修好了」。贴命令比贴结论有用。">${
@@ -374,8 +383,11 @@ export async function qaDetailPage(ctx, id) {
                      }</button>
                      <span class="muted-note">一个人只能答一次，想补充就编辑原回答。</span>
                    </div>`
-                : `<p class="muted-note">登录后可以回答这个问题。</p>
-                   <button class="btn btn-primary" type="button" data-act="login">去登录</button>`}
+                : (canWrite
+                  ? `<p class="muted-note">你的账号当前是只读状态，开通发言权限后即可回答。</p>
+                     <a class="btn btn-primary" href="#/me">去申请发言权限</a>`
+                  : `<p class="muted-note">登录后可以回答这个问题。</p>
+                     <button class="btn btn-primary" type="button" data-act="login">去登录</button>`)}
             </div>
           </section>
         </div>

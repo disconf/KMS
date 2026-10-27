@@ -45,6 +45,16 @@ type AppConfig struct {
 	// ExposeDocs 决定是否对外暴露 /docs 与 /openapi.yaml。
 	// 用指针是为了区分「没配置」和「显式配成 false」，默认值见 ExposeAPIDocs。
 	ExposeDocs *bool `yaml:"expose_docs"`
+	// AllowRegister 是注册总开关，默认开。
+	//
+	// 公开注册一旦被刷号，最快的止血手段是关掉入口而不是改代码发版；
+	// 用指针同样是"没配 = 默认开"，避免老配置因为缺字段而把注册关掉。
+	AllowRegister *bool `yaml:"allow_register"`
+}
+
+// RegistrationEnabled 返回是否允许新用户自助注册。
+func (c *Config) RegistrationEnabled() bool {
+	return c.App.AllowRegister == nil || *c.App.AllowRegister
 }
 
 type LogConfig struct {
@@ -112,6 +122,48 @@ type SMSConfig struct {
 	Aliyun       SMSAliyunConfig  `yaml:"aliyun"`
 	Tencent      SMSTencentConfig `yaml:"tencent"`
 	Webhook      SMSWebhookConfig `yaml:"webhook"`
+}
+
+// MailConfig 邮件验证码通道。
+//
+// 和短信分开配置而不是复用一套：两者的限流额度、失败代价、
+// 通道凭据完全不同，合在一起只会让配置读起来更绕。
+type MailConfig struct {
+	Provider     string         `yaml:"provider"` // mock | smtp
+	CodeTTL      Duration       `yaml:"code_ttl"`
+	SendInterval Duration       `yaml:"send_interval"`
+	HourlyLimit  int            `yaml:"hourly_limit"`
+	DailyLimit   int            `yaml:"daily_limit"`
+	ExposeCode   bool           `yaml:"expose_code"`
+	SMTP         MailSMTPConfig `yaml:"smtp"`
+}
+
+// MailSMTPConfig 标准 SMTP 发信参数。
+//
+// 465 走隐式 TLS（QQ/163/腾讯企业邮都用这个），587 走 STARTTLS，
+// 由 Port 与 TLS 一起决定，不在这里猜厂商。
+type MailSMTPConfig struct {
+	Host     string   `yaml:"host"`
+	Port     int      `yaml:"port"`
+	Username string   `yaml:"username"`
+	Password string   `yaml:"password"`
+	From     string   `yaml:"from"`
+	FromName string   `yaml:"from_name"`
+	TLS      bool     `yaml:"tls"`
+	Timeout  Duration `yaml:"timeout"`
+}
+
+// Configured 判断邮件通道是否具备发信条件。
+//
+// mock 也算"配置好了"：它的作用是本地把验证码打到日志里，
+// 开发期要能完整走通注册。真正的拦截在 service 层——
+// 生产环境用 mock 会直接回 501，而不是靠这里拦住启动。
+func (c MailConfig) Configured() bool {
+	if c.Provider == "mock" {
+		return true
+	}
+	return c.Provider == "smtp" && strings.TrimSpace(c.SMTP.Host) != "" &&
+		strings.TrimSpace(c.SMTP.From) != ""
 }
 
 type WechatConfig struct {
@@ -233,6 +285,7 @@ type Config struct {
 	Redis     RedisConfig     `yaml:"redis"`
 	JWT       JWTConfig       `yaml:"jwt"`
 	SMS       SMSConfig       `yaml:"sms"`
+	Mail      MailConfig      `yaml:"mail"`
 	Wechat    WechatConfig    `yaml:"wechat"`
 	Scheduler SchedulerConfig `yaml:"scheduler"`
 	Storage   StorageConfig   `yaml:"storage"`
@@ -326,6 +379,14 @@ func defaults() *Config {
 			Webhook:      SMSWebhookConfig{Timeout: Duration(5 * time.Second)},
 		},
 		Wechat: WechatConfig{Mock: true},
+		Mail: MailConfig{
+			Provider:     "mock",
+			CodeTTL:      Duration(10 * time.Minute),
+			SendInterval: Duration(60 * time.Second),
+			HourlyLimit:  5,
+			DailyLimit:   20,
+			SMTP:         MailSMTPConfig{Port: 465, TLS: true, Timeout: Duration(10 * time.Second)},
+		},
 		Payment: PaymentConfig{
 			Provider:         "mock",
 			PayTimeout:       Duration(15 * time.Minute),
@@ -400,6 +461,8 @@ func applyEnv(c *Config) {
 	setStr(&c.App.Addr, "APP_ADDR")
 	setStr(&c.App.BaseURL, "APP_BASE_URL")
 	setStr(&c.App.FrontendURL, "APP_FRONTEND_URL")
+	setBoolPtr(&c.App.ExposeDocs, "APP_EXPOSE_DOCS")
+	setBoolPtr(&c.App.AllowRegister, "APP_ALLOW_REGISTER")
 
 	setStr(&c.Log.Level, "LOG_LEVEL")
 	setStr(&c.Log.Format, "LOG_FORMAT")
@@ -432,6 +495,21 @@ func applyEnv(c *Config) {
 	setBool(&c.SMS.ExposeCode, "SMS_EXPOSE_CODE")
 	setStr(&c.SMS.Webhook.URL, "SMS_WEBHOOK_URL")
 	setStr(&c.SMS.Webhook.Token, "SMS_WEBHOOK_TOKEN")
+
+	setStr(&c.Mail.Provider, "MAIL_PROVIDER")
+	setDur(&c.Mail.CodeTTL, "MAIL_CODE_TTL")
+	setDur(&c.Mail.SendInterval, "MAIL_SEND_INTERVAL")
+	setInt(&c.Mail.HourlyLimit, "MAIL_HOURLY_LIMIT")
+	setInt(&c.Mail.DailyLimit, "MAIL_DAILY_LIMIT")
+	setBool(&c.Mail.ExposeCode, "MAIL_EXPOSE_CODE")
+	setStr(&c.Mail.SMTP.Host, "MAIL_SMTP_HOST")
+	setInt(&c.Mail.SMTP.Port, "MAIL_SMTP_PORT")
+	setStr(&c.Mail.SMTP.Username, "MAIL_SMTP_USERNAME")
+	setStr(&c.Mail.SMTP.Password, "MAIL_SMTP_PASSWORD")
+	setStr(&c.Mail.SMTP.From, "MAIL_SMTP_FROM")
+	setStr(&c.Mail.SMTP.FromName, "MAIL_SMTP_FROM_NAME")
+	setBool(&c.Mail.SMTP.TLS, "MAIL_SMTP_TLS")
+	setDur(&c.Mail.SMTP.Timeout, "MAIL_SMTP_TIMEOUT")
 
 	setStr(&c.Wechat.AppID, "WECHAT_APP_ID")
 	setStr(&c.Wechat.AppSecret, "WECHAT_APP_SECRET")
@@ -470,6 +548,15 @@ func setBool(dst *bool, key string) {
 	if v, ok := os.LookupEnv(key); ok {
 		if b, err := strconv.ParseBool(strings.TrimSpace(v)); err == nil {
 			*dst = b
+		}
+	}
+}
+
+// setBoolPtr 覆盖 *bool 字段：nil 表示"没配"，只有环境变量真的存在时才赋值。
+func setBoolPtr(dst **bool, key string) {
+	if v, ok := os.LookupEnv(key); ok {
+		if b, err := strconv.ParseBool(strings.TrimSpace(v)); err == nil {
+			*dst = &b
 		}
 	}
 }
@@ -533,6 +620,26 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("sms.provider=webhook 时 sms.webhook.url 不能为空")
 	}
 
+	switch c.Mail.Provider {
+	case "mock", "smtp":
+	default:
+		return fmt.Errorf("mail.provider 取值非法: %q（应为 mock/smtp）", c.Mail.Provider)
+	}
+	if c.Mail.CodeTTL.Std() <= 0 || c.Mail.SendInterval.Std() <= 0 {
+		return fmt.Errorf("mail.code_ttl 与 mail.send_interval 必须为正数")
+	}
+	if c.Mail.Provider == "smtp" {
+		if strings.TrimSpace(c.Mail.SMTP.Host) == "" {
+			return fmt.Errorf("mail.provider=smtp 时 mail.smtp.host 不能为空")
+		}
+		if strings.TrimSpace(c.Mail.SMTP.From) == "" {
+			return fmt.Errorf("mail.provider=smtp 时 mail.smtp.from 不能为空")
+		}
+		if c.Mail.SMTP.Port <= 0 || c.Mail.SMTP.Port > 65535 {
+			return fmt.Errorf("mail.smtp.port 非法: %d", c.Mail.SMTP.Port)
+		}
+	}
+
 	switch c.Storage.Driver {
 	case "local", "oss", "cos":
 	default:
@@ -591,6 +698,13 @@ func (c *Config) Validate() error {
 		}
 		if c.Wechat.Mock {
 			return fmt.Errorf("生产环境禁止开启 wechat.mock")
+		}
+		// 邮件通道不设硬红线，这是刻意和短信区别对待：
+		// 短信挂了只是少一种登录方式，邮件配置写错却会让进程起不来，
+		// 等于"注册功能没配好 → 整站打不开"。改为运行时给 501，
+		// 并在启动日志里 warn 一条，让人看得见但不至于下不了台。
+		if c.Mail.ExposeCode {
+			return fmt.Errorf("生产环境禁止开启 mail.expose_code")
 		}
 		if c.Payment.Provider == "mock" {
 			return fmt.Errorf("生产环境禁止使用 payment.provider=mock（它会把订单直接置为已支付）")
