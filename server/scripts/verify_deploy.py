@@ -12,6 +12,7 @@
 会真的创建一条悬赏订单（标题带"部署自检"），因为"能下单"才是部署成功的证据。
 """
 import json
+import os
 import random
 import sys
 import time
@@ -196,9 +197,19 @@ def main():
         skip("真实发信与邮箱注册", "探针结论不明确")
 
     print("\n== 3. 用户侧：登录 → 只读拦截 → 实名申请 → 发布悬赏 ==")
+    admin_token = None
     if not sms_ok:
+        # 短信不通时后台并非不可验证：管理员还能用口令登录。
+        # 口令从环境变量读，不写进脚本（脚本会进仓库）。
+        admin_pwd = os.environ.get("KMS_ADMIN_PASSWORD")
+        if admin_pwd:
+            code, body, _ = call("POST", "/auth/login/password",
+                                 {"phone": "13800000000", "password": admin_pwd},
+                                 expect=200, label="管理员密码登录")
+            admin_token = ((ok_data(body) or {}).get("token") or {}).get("accessToken")
+            check(bool(admin_token), "拿到管理员令牌（口令登录，不依赖短信）")
         for lbl in ("用户登录（短信验证码）", "新账号只读拦截", "实名申请与后台审批",
-                    "发布悬赏", "专家抢单与抽佣", "支付通道切换", "后台订单列表"):
+                    "发布悬赏", "专家抢单与抽佣", "支付通道切换"):
             skip(lbl, "短信通道未接通")
     else:
         admin_token, admin_data = login("13800000000")   # 种子管理员
@@ -273,11 +284,15 @@ def main():
             check(True, "当前无可在线支付通道（offline 线下收款，符合预期）")
             skip("在线支付推进", "未接通微信/支付宝，provider=offline")
 
-        print("\n== 6. 运营侧：后台可见 ==")
+    print("\n== 6. 运营侧：后台可见 ==")
+    if admin_token:
         call("GET", "/admin/orders?pageSize=5", token=admin_token, expect=200,
              label="后台订单列表")
         call("GET", "/admin/speak-applications?status=pending&pageSize=5", token=admin_token,
              expect=200, label="后台发言申请队列")
+    else:
+        skip("后台订单列表", "没有管理员令牌")
+        skip("后台发言申请队列", "没有管理员令牌")
 
     total = len(results)
     passed = sum(1 for r in results if r)
