@@ -75,6 +75,12 @@ else
   echo "[config] config.yaml 已存在，沿用（手工修改不会丢）"
 fi
 
+# 容器里以 uid 10001（appuser）运行，config.yaml 是只读 bind mount，
+# 属主留在 root 时会直接 permission denied —— 启动阶段就失败。
+# 改成容器用户的属主，权限仍收在 600，宿主机其他用户读不到。
+chown 10001:10001 config.yaml 2>/dev/null || true
+chmod 600 config.yaml
+
 # -------------------------------------------------------------- build --
 echo "[build] 构建应用镜像（首次约 3-5 分钟）"
 docker compose build api
