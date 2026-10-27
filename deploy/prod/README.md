@@ -38,8 +38,34 @@ docker compose restart nginx
 ## 管理后台
 
 - 后台地址：`https://<域名>/#/admin`，账号 `13800000000`，走"管理员密码登录"。
-- 普通用户仍是手机验证码登录；短信通道（`sms.provider`）未接通前新用户无法注册，
-  拿到资质后在 `config.yaml` 配置 `sms` 段并 `docker compose restart api`。
+
+## 用户注册与权限
+
+- 用户自助注册走**邮箱验证码 + 自设密码**，登录支持"邮箱+密码"与"邮箱+验证码"两种。
+- 新注册账号一律**只读**：能浏览全部内容、进个人中心，不能提问/回答/投稿/发悬赏。
+- 想发言要在「我的」页提交实名申请（真实姓名 + 联系方式），后台
+  `#/admin/speak` 审核通过后**无需重新登录**即可发言；驳回必须写原因，会回显给用户。
+- 手机号验证码登录仍保留，但依赖短信通道（`sms.provider`）接通；未接通时
+  发码返回 502/90003，只影响手机号登录，不影响邮箱注册。拿到短信资质后配置
+  `sms` 段并 `docker compose restart api`。
+
+### 邮件通道（SMTP）
+
+注册与邮箱登录唯一依赖。配置在 `.env`，改完 `docker compose up -d api` 生效：
+
+```bash
+MAIL_PROVIDER=smtp
+MAIL_SMTP_HOST=smtp.163.com       # QQ: smtp.qq.com / 企业邮: smtp.exmail.qq.com
+MAIL_SMTP_PORT=465                # 465 隐式 TLS，587/25 走 STARTTLS
+MAIL_SMTP_USERNAME=you@163.com
+MAIL_SMTP_PASSWORD=<授权码>        # 不是登录密码
+MAIL_SMTP_FROM=you@163.com        # 必须与发件账号一致，否则被服务商拒
+MAIL_SMTP_FROM_NAME=个人工作经验分享
+MAIL_SMTP_TLS=true
+```
+
+未配置时注册接口返回 501/20024（明确报错，不假装已发送），站点其余部分不受影响。
+生产环境禁止 `MAIL_PROVIDER=mock` 与 `MAIL_EXPOSE_CODE=true`，启动校验会拒绝。
 
 ## 日常运维
 

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -499,6 +500,29 @@ func TestValidateTitleRejectsTooShortAndTooLong(t *testing.T) {
 	_, err = validateTitle(strings.Repeat("长", maxLen+1))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errcode.ErrTitleInvalid)
+}
+
+// TestTruncateSlugNeverSplitsRune 回归：按字节截断必须落在字符边界上。
+//
+// 线上真实故障：资讯抓取用 100 字节截中文标题，恰好切在某个汉字中间，
+// 写库时 MySQL 报 1366 Incorrect string value，整条资讯静默丢失。
+func TestTruncateSlugNeverSplitsRune(t *testing.T) {
+	cases := []string{
+		strings.Repeat("汉", 40), // 120 字节，任意切点都可能劈字
+		"K8s 集群节点 NotReady 排查思路与实战经验分享记录与复盘",      // 中英混排
+		"开源中国资讯：某某项目发布 3.0 版本，带来全新的调度器与可观测能力改进说明", // 真实标题形状
+	}
+	for _, in := range cases {
+		got := truncateSlug(in, 100)
+		assert.True(t, utf8.ValidString(got), "截断结果必须是合法 UTF-8：%q", got)
+		assert.LessOrEqual(t, len(got), 100, "不得超过字节上限")
+		assert.NotEmpty(t, got)
+		assert.False(t, strings.HasSuffix(got, "-"), "尾部连字符应被清掉")
+	}
+
+	// 中英混排时，切点前的半个汉字被整字丢弃，剩下的内容仍可读。
+	got := truncateSlug(strings.Repeat("汉", 34)+"abc", 100)
+	assert.Equal(t, 99, len(got), "102 字节截到 100 后回退一个汉字，应为 99 字节")
 }
 
 // ============================ 测试辅助 ============================

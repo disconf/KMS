@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/opsexpert/platform/internal/dto"
 	"github.com/opsexpert/platform/internal/model"
@@ -875,13 +876,21 @@ func (s *ArticleService) resolveCategorySlug(ctx context.Context, provided, name
 }
 
 // truncateSlug 按字节上限截断并清掉尾部残留的连字符。
-// slug 的字符合集已限定为 ASCII 与汉字，截断不会切出半个多字节字符，
-// 但可能留下结尾的 "-"，所以再 trim 一次。
+//
+// maxLen 是**字节**上限（对齐 MySQL varchar 的长度语义），但汉字是 3 字节，
+// 直接 slug[:maxLen] 会把最后一个字劈成半个 UTF-8 序列——写库时 MySQL 直接报
+// 1366 Incorrect string value。线上资讯抓取就是这么挂的：中文标题按 100 字节
+// 切，恰好切在某个字的中间，于是整条资讯写不进去。
+// 所以先退到字符边界再截。
 func truncateSlug(slug string, maxLen int) string {
 	if len(slug) <= maxLen {
 		return slug
 	}
-	return strings.Trim(slug[:maxLen], "-")
+	cut := maxLen
+	for cut > 0 && !utf8.RuneStart(slug[cut]) {
+		cut--
+	}
+	return strings.Trim(slug[:cut], "-")
 }
 
 // checkCategory 校验分类存在（0 表示不指定分类，允许留空）。
