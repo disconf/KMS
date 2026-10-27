@@ -96,7 +96,9 @@ func (QuizOptionList) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
 type QuizQuestion struct {
 	Base
 
-	Stem string `gorm:"type:text;index;comment:题干" json:"stem"`
+	// 题干是 TEXT，索引必须带前缀长度：MySQL 不允许对 TEXT 建无长度索引
+	// （Error 1170），SQLite 则忽略 length，两边都能过。
+	Stem string `gorm:"type:text;index:idx_quiz_stem,length:191;comment:题干" json:"stem"`
 	// Type 决定判分规则：单选/判断必须完全等于答案，多选要求集合相等。
 	Type    string         `gorm:"size:16;index;default:single;comment:题型" json:"type"`
 	Options QuizOptionList `gorm:"comment:选项列表" json:"options"`
