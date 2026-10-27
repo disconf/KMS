@@ -14,8 +14,8 @@ import {
 import { closeModal, emptyHTML, openModal, toastError, toastOk } from './ui.js';
 import { esc } from './util.js';
 
-/** 打开认证弹窗。已登录时直接返回。 */
-export function openAuthModal({ onSuccess } = {}) {
+/** 打开认证弹窗。已登录时直接返回。tab 可指定初始页签（'register'）。 */
+export function openAuthModal({ onSuccess, tab } = {}) {
   if (isLoggedIn()) return;
 
   openModal(`
@@ -111,11 +111,11 @@ export function openAuthModal({ onSuccess } = {}) {
         </p>
       </div>
     </div>
-  `, (modal) => mount(modal, onSuccess));
+  `, (modal) => mount(modal, onSuccess, tab));
 }
 
 /** 组装交互。mode 决定哪些字段可见。 */
-function mount(modal, onSuccess) {
+function mount(modal, onSuccess, initialTab) {
   const q = (sel) => modal.querySelector(sel);
 
   const title = q('#auth-title');
@@ -372,7 +372,12 @@ function mount(modal, onSuccess) {
   });
 
   applyMode();
-  emailInput.focus();
+  if (initialTab === 'register') {
+    // 从顶栏「注册」进来时直接落在注册页签。
+    modal.querySelector('[data-tab="register"]').click();
+  } else {
+    emailInput.focus();
+  }
 }
 
 /**

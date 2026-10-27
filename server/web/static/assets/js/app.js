@@ -254,6 +254,7 @@ function bindGlobalEvents() {
   delegate(document.getElementById('account') || document.body, '[data-act]', (node) => {
     const act = node.getAttribute('data-act');
     if (act === 'login') openLoginModal();
+    if (act === 'register') openLoginModal('register');
     if (act === 'logout') doLogout();
     if (act === 'password') openPasswordModal();
     if (act === 'home') location.hash = '#/';
@@ -571,9 +572,14 @@ function renderAccount() {
   const user = currentUser();
 
   if (!user) {
-    box.innerHTML = `<button class="btn btn-primary btn-sm" type="button" data-act="login">
-      ${icon('user', 14)}登录
-    </button>`;
+    // 注册单独给一个按钮：藏在登录弹窗的页签里，新访客根本发现不了。
+    box.innerHTML = `
+      <button class="btn btn-sm" type="button" data-act="register">
+        ${icon('plus', 14)}注册
+      </button>
+      <button class="btn btn-primary btn-sm" type="button" data-act="login">
+        ${icon('user', 14)}登录
+      </button>`;
     return;
   }
 
@@ -619,8 +625,9 @@ async function doLogout() {
 
 // 弹窗本体搬到了 auth-modal.js：登录/注册 × 邮箱/手机号 × 密码/验证码
 // 四组组合放这里会把路由入口淹掉。这里只保留"登录成功后要刷新什么"。
-function openLoginModal() {
+function openLoginModal(tab) {
   openAuthModal({
+    tab,
     onSuccess: async () => {
       await reloadChannels();
       await route();
