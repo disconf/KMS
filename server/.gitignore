@@ -2,8 +2,10 @@
 bin/
 *.exe
 
-# 本地数据（SQLite）
-data/
+# 本地数据（SQLite）。必须锚定到 server/ 根：
+# 写成 data/ 会连 internal/bootstrap/data/（go:embed 的 96 篇教程正文）一起忽略，
+# 那些文件进不了仓库，Docker 构建时 go:embed 直接 no matching files found。
+/data/
 *.db
 *.db-shm
 *.db-wal
