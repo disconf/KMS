@@ -18,6 +18,7 @@
 需要 mail.provider=mock + mail.expose_code=true：验证码从响应里直接取，
 拿不到再退回读服务日志（日志里是 `to=<邮箱> code=<6位>`）。
 """
+import base64
 import json
 import re
 import sys
@@ -80,6 +81,50 @@ def call(method, path, body=None, token=None, expect=None, label="", raw_body=No
 def biz(payload):
     """业务错误码。0 / 缺失都当成功。"""
     return int(payload.get("code") or 0)
+
+
+# 1×1 的合法 PNG。上传接口按文件头识别类型，随便编几个字节过不了。
+PNG_1PX = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8AAAwAB/wD/6f7ZAAAAAElFTkSuQmCC"
+)
+
+
+def upload_image(token, scene="article_image", data=PNG_1PX, filename="shot.png"):
+    """按 multipart/form-data 发一个文件。返回 (HTTP 状态, JSON)。"""
+    boundary = "----smoke" + str(int(time.time() * 1000))
+    body = b"".join([
+        f"--{boundary}\r\n".encode(),
+        f'Content-Disposition: form-data; name="scene"\r\n\r\n{scene}\r\n'.encode(),
+        f'--{boundary}\r\n'.encode(),
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode(),
+        b"Content-Type: image/png\r\n\r\n",
+        data,
+        f"\r\n--{boundary}--\r\n".encode(),
+    ])
+    req = urllib.request.Request(BASE + "/upload", data=body, method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status, json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode()
+        try:
+            return e.code, json.loads(raw)
+        except json.JSONDecodeError:
+            return e.code, {"_raw": raw[:200]}
+
+
+def head_status(url):
+    """只取状态码，用来验证静态图片能不能匿名访问。"""
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status, r.headers.get("Content-Type", "")
+    except urllib.error.HTTPError as e:
+        return e.code, ""
+    except urllib.error.URLError:
+        return 0, ""
 
 
 def code_from_log(email):
@@ -324,6 +369,38 @@ _, p = call("POST", "/auth/email/send",
             {"email": "whatever@example.com", "scene": "bogus"},
             expect=None, label="未知场景")
 check(biz(p) != 0, "未知场景被拒（Scene 只认 login/bind/register）")
+
+print("--- 9. 正文插图：上传与公开访问 ---")
+# 只读账号连图片都不该能传：上传等于往公共存储里发布内容。
+_, p = call("POST", "/auth/login/email",
+            {"email": MAIL_TAKEN, "password": PASSWORD}, expect=200,
+            label="只读账号登录（取令牌）")
+ro_token = ((p.get("data") or {}).get("token") or {}).get("accessToken") or ""
+code, p = upload_image(ro_token)
+check(code == 403 and biz(p) == 20026,
+      f"只读账号上传被拒（HTTP {code} / code {biz(p)}）")
+
+code, p = upload_image(token)
+data = p.get("data") or {}
+check(code == 201 and biz(p) == 0, f"可发言账号上传图片成功（HTTP {code}）")
+img_url = str(data.get("url", ""))
+check("/uploads/article/image/" in img_url, f"返回公开访问地址（{img_url}）")
+check(data.get("mime") == "image/png", f"按文件头识别出真实类型（{data.get('mime')}）")
+
+# url 可能是绝对的（storage.public_base_url / app.base_url 有配置时），也可能相对。
+root = BASE.rsplit("/api/v1", 1)[0]
+full_url = img_url if img_url.startswith("http") else root + img_url
+status, ctype = head_status(full_url)
+check(status == 200 and "image/png" in ctype,
+      f"图片可匿名访问且类型正确（HTTP {status} / {ctype}）")
+
+# 私有场景的 key 不能被公开入口读到，否则资质证书等于公开。
+status, _ = head_status(root + "/uploads/expert/cert/202610/0000000000000000.png")
+check(status != 200, f"私有场景文件从公开入口读不到（HTTP {status}）")
+
+# 路径穿越：任何 ../ 都不能把 key 带出存储根目录。
+status, _ = head_status(root + "/uploads/article/image/..%2F..%2Fconfigs%2Fconfig.yaml")
+check(status != 200, f"路径穿越被拒（HTTP {status}）")
 
 total = len(results)
 passed = sum(1 for r in results if r)

@@ -90,7 +90,7 @@ func New(opt Options) *gin.Engine {
 	registerKnowledgeRoutes(v1, opt)
 	registerContentRoutes(v1, opt)
 	registerQuizRoutes(v1, opt)
-	registerUploadRoutes(v1, opt)
+	registerUploadRoutes(v1, r, opt)
 	registerExpertRoutes(v1, opt)
 	registerQaRoutes(v1, opt)
 	registerOrderRoutes(v1, opt)
@@ -276,11 +276,18 @@ func registerQuizRoutes(g *gin.RouterGroup, opt Options) {
 //   - /upload 必须登录，否则任何人都能往存储里灌垃圾；
 //   - /files 不能要求登录——私有文件的 URL 要能直接塞进 <img src>，
 //     浏览器的图片请求带不上 Authorization 头，这里的凭证就是 URL 上的签名。
-func registerUploadRoutes(g *gin.RouterGroup, opt Options) {
+//   - /uploads 同理，而且它只服务公开场景；私有场景的 key 从这里一律读不到。
+//
+// /uploads 之所以挂在服务根路径而不是 /api/v1 下：上传接口返回的地址
+// 就是这个形状，Markdown 正文里的图片也照抄它。挂到 API 前缀下等于让
+// 存量正文全部裂图，改不回来。
+func registerUploadRoutes(g *gin.RouterGroup, root gin.IRouter, opt Options) {
 	h := handler.NewUploadHandler(opt.Uploads)
 
 	g.GET("/upload/scenes", h.Scenes)
 	g.GET("/files", h.Download)
+	root.GET("/uploads/*key", h.Public)
+	root.HEAD("/uploads/*key", h.Public)
 
 	authed := g.Group("", opt.authMW())
 	authed.POST("/upload", h.Upload)

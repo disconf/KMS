@@ -26,6 +26,7 @@ import {
 import {
   ORDER_STATUS, ORDER_TRANSITIONS, ORDER_TYPE_LABEL, fmtCents, statusChipHTML,
 } from './orders.js';
+import { enableMarkdownImages } from './md-image.js';
 
 /* ------------------------------------------------------------ 公共 -- */
 
@@ -854,6 +855,9 @@ export async function adminArticleEditPage(ctx, id) {
     }),
     mount: (root) => {
       const form = root.querySelector('[data-editor]');
+
+      // 后台改正文是最高频的编辑场景，同样要能贴图。
+      enableMarkdownImages(root, form.querySelector('#f-content'));
 
       form.querySelector('[data-save]').addEventListener('click', async (e) => {
         const payload = {

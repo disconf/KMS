@@ -21,6 +21,7 @@ import { api, isLoggedIn, ApiError } from './api.js';
 import { esc, fmtNum, fmtDate, icon, setHashQuery, splitTags } from './util.js';
 import { bindPager, emptyHTML, pagerHTML, toastError, toastOk } from './ui.js';
 import { speakGateOrNull } from './auth-modal.js';
+import { enableMarkdownImages } from './md-image.js';
 
 const PAGE_SIZE = 10;
 
@@ -204,6 +205,9 @@ function mountArticleForm(root) {
   const tagsEl = root.querySelector('#c-tags');
   const lineEl = root.querySelector('#c-summary-line');
   const submit = root.querySelector('#c-submit');
+
+  // 正文支持粘贴 / 拖入图片，落库是标准 Markdown 图片语法。
+  enableMarkdownImages(root, contentEl);
 
   const refresh = () => {
     const t = titleEl.value.trim().length;

@@ -1007,6 +1007,11 @@ a.chip:hover { border-color: var(--brand-border); color: var(--brand-dark); back
 /* ------------------------------------------------------ ⑥ Markdown -- */
 .prose { font-size: 14.6px; line-height: 1.85; color: #1F2937; }
 .prose > *:first-child { margin-top: 0; }
+/* 正文插图：截图宽度不可控，一律收到栏宽内等比缩放，否则长图会把整页撑出横向滚动。 */
+.prose img {
+  max-width: 100%; height: auto; display: block; margin: 18px auto;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+}
 .prose h2 {
   font-size: 19px; margin: 34px 0 13px; padding-bottom: 9px;
   border-bottom: 1px solid var(--border);
@@ -1390,6 +1395,25 @@ textarea.input { height: auto; padding: 10px 12px; line-height: 1.7; resize: ver
   font-family: var(--font-mono); font-size: 12.8px; line-height: 1.75;
   resize: vertical; min-height: 240px;
 }
+
+/* Markdown 编辑器的图片工具条：按钮 + 一句"能粘贴"的提示。
+   提示必须写出来——不写的话没人知道可以直接 Ctrl+V。 */
+.md-tools {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.md-tools-hint { font-size: 12px; color: var(--text-3); }
+.md-tools .btn { gap: 6px; }
+
+/* 拖拽悬停时给输入框一个明确的落点反馈，否则用户不知道松手会不会生效。 */
+.code-input.is-drop-target {
+  border-color: var(--brand-border);
+  box-shadow: 0 0 0 3px rgba(30,94,255,.12);
+  background: var(--brand-soft, rgba(30,94,255,.04));
+}
+
+/* 上传中：边框呼吸，说明"正在处理"，避免用户以为没反应又贴一次。 */
+.code-input[data-md-uploading] { border-style: dashed; }
 
 .contrib-list { display: flex; flex-direction: column; gap: 10px; }
 .contrib-row {

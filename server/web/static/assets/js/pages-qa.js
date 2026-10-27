@@ -15,6 +15,7 @@ import { api, canSpeak, isLoggedIn, currentUser, ApiError } from './api.js';
 import { esc, fmtRelative, fmtNum, icon, renderMarkdown, setHashQuery } from './util.js';
 import { avatarHTML, bindPager, emptyHTML, pagerHTML, toastError, toastOk } from './ui.js';
 import { speakGateOrNull } from './auth-modal.js';
+import { enableMarkdownImages } from './md-image.js';
 
 const PAGE_SIZE = 10;
 
@@ -243,6 +244,8 @@ export async function qaAskPage(ctx) {
       const submit = root.querySelector('#qa-submit');
       const picked = new Set();
 
+      enableMarkdownImages(root, descEl);
+
       root.querySelectorAll('[data-skill]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const id = Number(btn.getAttribute('data-skill'));
@@ -407,6 +410,9 @@ export async function qaDetailPage(ctx, id) {
     `,
     mount: (root) => {
       const submitBtn = root.querySelector('[data-submit-answer]');
+      // 回答框同样支持贴图：一张截图能省掉十行"我这里报了什么错"。
+      const answerEl = root.querySelector('#qa-answer');
+      if (answerEl) enableMarkdownImages(root, answerEl);
       if (submitBtn) {
         submitBtn.addEventListener('click', async () => {
           const ta = root.querySelector('#qa-answer');

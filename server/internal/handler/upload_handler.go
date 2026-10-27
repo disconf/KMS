@@ -81,6 +81,29 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 	response.Created(c, result)
 }
 
+// Public 公开文件的静态访问入口（头像、封面、正文插图）。
+//
+// 这些地址会直接出现在 <img src> 与 Markdown 正文里，不能要求登录；
+// key 里带随机段且写入后不再覆盖，按 immutable 长缓存处理。
+//
+//	@Summary  公开文件访问
+//	@Tags     upload
+//	@Param    key path string true "存储 key"
+//	@Success  200 {file} binary
+//	@Router   /uploads/{key}
+func (h *UploadHandler) Public(c *gin.Context) {
+	key := strings.TrimPrefix(c.Param("key"), "/")
+	rc, ctype, err := h.uploads.OpenPublic(c.Request.Context(), key)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	defer func() { _ = rc.Close() }()
+
+	c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	c.DataFromReader(http.StatusOK, -1, ctype, rc, nil)
+}
+
 // Download 私有文件下载，URL 上必须带有效签名。
 //
 //	@Summary  下载私有文件

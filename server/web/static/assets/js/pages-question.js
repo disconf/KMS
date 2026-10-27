@@ -16,6 +16,7 @@ import { esc, icon } from './util.js';
 import { emptyHTML, toastError, toastOk } from './ui.js';
 import { fmtCents } from './orders.js';
 import { speakGateOrNull } from './auth-modal.js';
+import { enableMarkdownImages } from './md-image.js';
 
 const TITLE_MIN = 5;
 const TITLE_MAX = 200;
@@ -171,6 +172,9 @@ export async function questionNewPage() {
     const summary = root.querySelector('#q-summary');
     const submit = root.querySelector('#q-submit');
     const picked = new Set();
+
+    // 描述支持 Markdown，也就该支持把报错截图直接粘进来。
+    enableMarkdownImages(root, descEl);
 
     const refreshSummary = () => {
       const cents = yuanToCents(budgetEl.value);

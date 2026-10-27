@@ -2,6 +2,7 @@ package storage
 
 import (
 	"path"
+	"strings"
 	"time"
 )
 
@@ -111,6 +112,23 @@ func (p Policy) PublicDir() string {
 		return ""
 	}
 	return p.Dir
+}
+
+// PolicyForKey 按存储 key 找出它属于哪个场景。
+//
+// key 的首段就是场景目录，但目录之间存在前缀包含关系（article/image 与
+// article/cover 同属 article），所以取最长匹配，不能遇到第一个就返回。
+func PolicyForKey(key string) (Policy, bool) {
+	var best Policy
+	found := false
+	for _, p := range policies {
+		if key == p.Dir || strings.HasPrefix(key, p.Dir+"/") {
+			if !found || len(p.Dir) > len(best.Dir) {
+				best, found = p, true
+			}
+		}
+	}
+	return best, found
 }
 
 // BuildKey 生成存储 key。

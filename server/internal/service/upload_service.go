@@ -225,6 +225,26 @@ func HasPrefix(key, scene string) bool {
 	return strings.HasPrefix(key, p.Dir+"/")
 }
 
+// OpenPublic 读取公开文件（头像、封面、正文插图等），匿名可用。
+//
+// 私有场景的 key 即使被猜到也必须读不到：这里统一返回"文件不存在"，
+// 而不是"无权访问"——后者等于告诉对方这个 key 是真的。
+func (s *UploadService) OpenPublic(ctx context.Context, key string) (io.ReadCloser, string, error) {
+	k, err := storage.CleanKey(key)
+	if err != nil {
+		return nil, "", errcode.ErrFileMissing
+	}
+	policy, ok := storage.PolicyForKey(k)
+	if !ok || policy.Private {
+		return nil, "", errcode.ErrFileMissing.WithMsg("文件不存在或已被删除")
+	}
+	rc, err := s.store.Open(ctx, k)
+	if err != nil {
+		return nil, "", err
+	}
+	return rc, contentTypeOf(k), nil
+}
+
 // Delete 删除文件。
 func (s *UploadService) Delete(ctx context.Context, key string) error {
 	return s.store.Delete(ctx, key)
