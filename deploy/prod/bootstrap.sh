@@ -1,18 +1,42 @@
 #!/usr/bin/env bash
 # 生产环境首次部署 / 重复部署（幂等）。
 #
-# 做五件事：
+# 做六件事：
 #   1. 生成 .env（已有则沿用，绝不覆盖手工改过的口令）
 #   2. 从 config.template.yaml 渲染 config.yaml（已有则沿用）
-#   3. 构建应用镜像
-#   4. 起 MySQL/Redis，等健康后跑一次 init（建表 + 种子，幂等）
-#   5. 起全部服务；宿主机 nginx 关闭（80/443 由容器接管）
+#   3. 让出 80/443（宿主机 nginx 必须先停，否则容器端口绑定失败）
+#   4. 保证有 swap（2G 内存的机器编译 Go 会打满，没有 swap 会 OOM 卡死）
+#   5. 构建应用镜像
+#   6. 起 MySQL/Redis，等健康后跑一次 init（建表 + 种子，幂等），再起全部服务
 #
 # 用法：sudo bash bootstrap.sh
 set -euo pipefail
 
 cd "$(dirname "$0")"
 DOMAIN_DEFAULT="www.jinzhiqiang.com"
+
+# ------------------------------------------------------- 让出 80/443 --
+# 顺序很关键：宿主机 nginx 若在跑，docker 绑不上 80/443，
+# 后面 compose up 会直接失败。这一步放到最前面，别等起来了再停。
+if systemctl is-active --quiet nginx 2>/dev/null; then
+  systemctl disable --now nginx >/dev/null 2>&1 || true
+  echo "[port] 已停止并禁用宿主机 nginx，80/443 交给容器"
+fi
+
+# ------------------------------------------------------------- swap --
+# 2G 内存跑 go build 很容易进 OOM：sshd 连 fork 都失败，表现为
+# "SSH 能连上但读不到 banner"，机器看着像挂了。加一块 swap 兜住。
+if [ "$(free -m | awk '/^Swap:/{print $2}')" -lt 512 ]; then
+  if [ ! -f /swapfile ]; then
+    fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+    chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
+    grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    echo "[swap] 已创建 2G /swapfile"
+  else
+    swapon /swapfile 2>/dev/null || true
+    echo "[swap] 复用已有 /swapfile"
+  fi
+fi
 
 # ---------------------------------------------------------------- .env --
 if [ ! -f .env ]; then

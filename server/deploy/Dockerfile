@@ -7,6 +7,10 @@ FROM ${GO_IMAGE} AS builder
 # 模块校验和仍由 go.sum 把关，镜像源只影响下载通道，不影响完整性。
 ENV GOPROXY=https://goproxy.cn,direct
 
+# 编译并行度限制到 2：生产机只有 2G 内存，默认按 CPU 核数并行编译
+# 峰值内存会把整台机器拖进 swap，连 sshd 都 fork 不出来。
+ENV GOFLAGS=-p=2
+
 WORKDIR /src
 
 # 先只拷依赖清单，利用层缓存避免每次改代码都重新下载依赖。
