@@ -87,15 +87,50 @@ var cmdbToolBookSeeds = []toolBookSeed{
 	},
 }
 
+// ---------------- 部署专题文档（不进教程集六章，作为独立站内文章挂实战指南） ----------------
+//
+// 内容提炼自仓库 docs/deployment/平台部署手册-单机与Kubernetes.md、
+// docs/operations/Neo4j与OpenSearch部署.md、生产就绪与灾备演练.md、灾备恢复演练.md。
+
+var cmdbExtraArticleMetas = []toolArticleMeta{
+	{articleSeed{Title: "CMDB 智能运维平台 单机 Docker Compose 部署详解", Slug: "cmdb-single-node",
+		CategorySlug: "automation",
+		Summary:      "端口规划、OS 初始化、bootstrap.sh 一键初始化、重启解封 Vault、升级与备份的完整单机操作手册。",
+		Tags:         []string{"CMDB", "Docker Compose", "部署"}}, "cmdb-single-node.md"},
+	{articleSeed{Title: "CMDB 智能运维平台 Kubernetes 生产部署实战", Slug: "cmdb-k8s-deploy",
+		CategorySlug: "automation",
+		Summary:      "3 控制面 + Worker 集群规划、Longhorn 到 Vault 七大基础组件、业务部署顺序、验收与升级回滚。",
+		Tags:         []string{"CMDB", "Kubernetes", "生产实践"}}, "cmdb-k8s-deploy.md"},
+	{articleSeed{Title: "CMDB 智能运维平台 中间件部署详解", Slug: "cmdb-middleware",
+		CategorySlug: "automation",
+		Summary:      "PG/Redis/Kafka/MinIO/Neo4j/OpenSearch 的单机与 K8s 两套形态，投影重建机制与四个真实踩坑。",
+		Tags:         []string{"CMDB", "中间件", "Neo4j", "OpenSearch"}}, "cmdb-middleware.md"},
+	{articleSeed{Title: "CMDB 智能运维平台 灾备恢复与演练", Slug: "cmdb-dr",
+		CategorySlug: "automation",
+		Summary:      "备份体系、dr-drill.sh 自动化恢复演练、故障场景清单、压测安全基线与一次真实恢复记录。",
+		Tags:         []string{"CMDB", "灾备", "演练"}}, "cmdb-dr.md"},
+}
+
 // ---------------- 四类实战教程关联 ----------------
+//
+// 注意：guide 的幂等粒度是「整组」——工具下已有任意 guide 就整组跳过。
+// 给老库加新条目需要先物理删除该工具的 tool_guides 再让种子重写（见 2026-11-03 部署记录）。
 
 var cmdbToolGuideSeeds = []toolGuideSeed{
 	{"cmdb", model.ToolGuideDeploy, "平台部署手册（单机与 Kubernetes）",
 		"https://github.com/disconf/CMDB/blob/main/docs/deployment/平台部署手册-单机与Kubernetes.md", "", 10},
-	{"cmdb", model.ToolGuideImplement, "CMDB 安装与多种部署方式（站内教程）",
+	{"cmdb", model.ToolGuideDeploy, "单机 Docker Compose 部署详解（站内教程）",
+		"", "cmdb-single-node", 15},
+	{"cmdb", model.ToolGuideDeploy, "CMDB 安装与多种部署方式（站内教程）",
 		"", "cmdb-install", 20},
+	{"cmdb", model.ToolGuideImplement, "Kubernetes 生产部署实战（站内教程）",
+		"", "cmdb-k8s-deploy", 30},
+	{"cmdb", model.ToolGuideImplement, "中间件部署详解（站内教程）",
+		"", "cmdb-middleware", 40},
+	{"cmdb", model.ToolGuideOptimize, "灾备恢复与演练（站内教程）",
+		"", "cmdb-dr", 50},
 	{"cmdb", model.ToolGuideOptimize, "生产就绪与灾备演练",
-		"https://github.com/disconf/CMDB/blob/main/docs/operations/生产就绪与灾备演练.md", "", 30},
+		"https://github.com/disconf/CMDB/blob/main/docs/operations/生产就绪与灾备演练.md", "", 60},
 	{"cmdb", model.ToolGuideCluster, "Kubernetes 部署清单（deploy/k8s）",
-		"https://github.com/disconf/CMDB/tree/main/deploy/k8s", "", 40},
+		"https://github.com/disconf/CMDB/tree/main/deploy/k8s", "", 70},
 }
