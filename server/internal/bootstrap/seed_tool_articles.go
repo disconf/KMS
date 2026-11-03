@@ -241,12 +241,21 @@ var toolArticleMetas = []toolArticleMeta{
 		Tags:         []string{"Loki", "LogQL", "命令行"}}, "loki-commands.md"},
 }
 
+// allToolArticleMetas 把四批工具教程文章元数据合成一份，
+// 供 toolArticleSeeds 拼正文、toolBookChapters 取导语共用——
+// 谁漏合并谁就会产出空导语或丢文章，所以收敛到这一个入口。
+func allToolArticleMetas() []toolArticleMeta {
+	return append(append(append(append([]toolArticleMeta{}, toolArticleMetas...),
+		extraToolArticleMetas...), cmdbToolArticleMetas...), licToolArticleMetas...)
+}
+
 // toolArticleSeeds 把元数据与 embed 的正文拼成普通文章种子。
 // 正文文件缺失视为代码错误（编译期就该发现），直接 panic——
 // 静默跳过会让教程集挂出一批只有标题的空节，比启动失败更难发现。
 func toolArticleSeeds() []articleSeed {
-	out := make([]articleSeed, 0, len(toolArticleMetas)+len(extraToolArticleMetas)+len(cmdbToolArticleMetas))
-	for _, m := range append(append(append([]toolArticleMeta{}, toolArticleMetas...), extraToolArticleMetas...), cmdbToolArticleMetas...) {
+	metas := allToolArticleMetas()
+	out := make([]articleSeed, 0, len(metas))
+	for _, m := range metas {
 		body, err := toolArticlesFS.ReadFile("data/articles/" + m.File)
 		if err != nil {
 			panic(fmt.Sprintf("工具教程文章正文缺失: %s: %v", m.File, err))

@@ -53,7 +53,7 @@ type toolBookSeed struct {
 // 文章标题用 toolName 拼出来，与 data/articles 里的正文一一对应。
 func toolBookChapters(toolSlug, toolName string) []toolBookChapterSeed {
 	summary := func(suffix string) string {
-		for _, m := range append(append([]toolArticleMeta{}, toolArticleMetas...), extraToolArticleMetas...) {
+		for _, m := range allToolArticleMetas() {
 			if m.articleSeed.Slug == toolSlug+"-"+suffix {
 				return m.articleSeed.Summary
 			}
@@ -115,13 +115,15 @@ var toolBookSeeds = []toolBookSeed{
 func seedToolBooks(ctx context.Context, db *gorm.DB) error {
 	adminID := findAdminID(ctx, db)
 
-	// 三批教程集合并处理：openresty 那本在 toolBookSeeds，
+	// 四批教程集合并处理：openresty 那本在 toolBookSeeds，
 	// 其余工具的在 seed_toolbook_more.go 的 extraToolBookSeeds，
-	// 自研 CMDB 平台的在 seed_tools_cmdb.go 的 cmdbToolBookSeeds。
-	books := make([]toolBookSeed, 0, len(toolBookSeeds)+len(extraToolBookSeeds)+len(cmdbToolBookSeeds))
+	// 自研 CMDB 平台的在 seed_tools_cmdb.go 的 cmdbToolBookSeeds，
+	// 其授权签发中心的在 seed_tools_lic.go 的 licToolBookSeeds。
+	books := make([]toolBookSeed, 0, len(toolBookSeeds)+len(extraToolBookSeeds)+len(cmdbToolBookSeeds)+len(licToolBookSeeds))
 	books = append(books, toolBookSeeds...)
 	books = append(books, extraToolBookSeeds...)
 	books = append(books, cmdbToolBookSeeds...)
+	books = append(books, licToolBookSeeds...)
 
 	for _, s := range books {
 		var tool model.Tool

@@ -131,10 +131,12 @@ func seedToolGuides(ctx context.Context, db *gorm.DB) error {
 // groupGuidesByTool 保持出现顺序地把种子按工具分组。
 func groupGuidesByTool() ([]string, map[string][]toolGuideSeed) {
 	// 自研 CMDB 平台的四类关联在 seed_tools_cmdb.go 的 cmdbToolGuideSeeds，
+	// 其授权签发中心的三类关联在 seed_tools_lic.go 的 licToolGuideSeeds，
 	// 这里合并后再分组，分组与幂等逻辑不变。
-	seeds := make([]toolGuideSeed, 0, len(toolGuideSeeds)+len(cmdbToolGuideSeeds))
+	seeds := make([]toolGuideSeed, 0, len(toolGuideSeeds)+len(cmdbToolGuideSeeds)+len(licToolGuideSeeds))
 	seeds = append(seeds, toolGuideSeeds...)
 	seeds = append(seeds, cmdbToolGuideSeeds...)
+	seeds = append(seeds, licToolGuideSeeds...)
 
 	order := make([]string, 0, 8)
 	grouped := make(map[string][]toolGuideSeed, 8)
