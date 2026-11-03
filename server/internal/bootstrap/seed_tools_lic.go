@@ -2,8 +2,13 @@ package bootstrap
 
 import "github.com/opsexpert/platform/internal/model"
 
-// 本文件是「CMDB 授权签发中心」的种子：CMDB 智能运维平台的配套授权管理站，
-// 以第 17 个工具收录进开源工具推荐，并配齐六篇站内正文 + 教程集 + 三类实战教程关联。
+// 本文件是「CMDB 授权签发中心」的种子：CMDB 智能运维平台的配套授权管理站。
+//
+// **2026-11-03 起对外下线**（该工具不对外公开）：已从 seed_kb / seed_tool_articles /
+// seed_toolbook / seed_news 四处合并点摘除，本文件仅保留内容备查；
+// 重新上线时把 licToolSeeds / licToolArticleMetas / licToolBookSeeds /
+// licToolGuideSeeds 在那四处接回即可，六篇正文仍在 data/articles/ 下。
+// 注意：摘除种子不会清理线上存量数据，重新上线前需先清理或确认幂等跳过。
 //
 // 内容来源是项目仓库的 README（部署、配置、使用、安全约束章节都在其中），
 // 不是泛泛的百科式介绍。注意两条内容纪律：

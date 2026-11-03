@@ -115,15 +115,14 @@ var toolBookSeeds = []toolBookSeed{
 func seedToolBooks(ctx context.Context, db *gorm.DB) error {
 	adminID := findAdminID(ctx, db)
 
-	// 四批教程集合并处理：openresty 那本在 toolBookSeeds，
+	// 三批教程集合并处理：openresty 那本在 toolBookSeeds，
 	// 其余工具的在 seed_toolbook_more.go 的 extraToolBookSeeds，
-	// 自研 CMDB 平台的在 seed_tools_cmdb.go 的 cmdbToolBookSeeds，
-	// 其授权签发中心的在 seed_tools_lic.go 的 licToolBookSeeds。
-	books := make([]toolBookSeed, 0, len(toolBookSeeds)+len(extraToolBookSeeds)+len(cmdbToolBookSeeds)+len(licToolBookSeeds))
+	// 自研 CMDB 平台的在 seed_tools_cmdb.go 的 cmdbToolBookSeeds。
+	// （授权签发中心 2026-11-03 起对外下线，licToolBookSeeds 不再接入。）
+	books := make([]toolBookSeed, 0, len(toolBookSeeds)+len(extraToolBookSeeds)+len(cmdbToolBookSeeds))
 	books = append(books, toolBookSeeds...)
 	books = append(books, extraToolBookSeeds...)
 	books = append(books, cmdbToolBookSeeds...)
-	books = append(books, licToolBookSeeds...)
 
 	for _, s := range books {
 		var tool model.Tool

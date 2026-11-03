@@ -241,12 +241,13 @@ var toolArticleMetas = []toolArticleMeta{
 		Tags:         []string{"Loki", "LogQL", "命令行"}}, "loki-commands.md"},
 }
 
-// allToolArticleMetas 把四批工具教程文章元数据合成一份，
+// allToolArticleMetas 把三批工具教程文章元数据合成一份，
 // 供 toolArticleSeeds 拼正文、toolBookChapters 取导语共用——
 // 谁漏合并谁就会产出空导语或丢文章，所以收敛到这一个入口。
+// （seed_tools_lic.go 的授权签发中心六篇 2026-11-03 起下线，不并入。）
 func allToolArticleMetas() []toolArticleMeta {
-	return append(append(append(append([]toolArticleMeta{}, toolArticleMetas...),
-		extraToolArticleMetas...), cmdbToolArticleMetas...), licToolArticleMetas...)
+	return append(append(append([]toolArticleMeta{}, toolArticleMetas...),
+		extraToolArticleMetas...), cmdbToolArticleMetas...)
 }
 
 // toolArticleSeeds 把元数据与 embed 的正文拼成普通文章种子。

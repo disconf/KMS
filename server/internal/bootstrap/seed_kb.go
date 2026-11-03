@@ -174,15 +174,14 @@ var toolSeeds = []toolSeed{
 func seedTools(ctx context.Context, db *gorm.DB) error {
 	adminID := findAdminID(ctx, db)
 
-	// 四批种子合并处理：内容重的 5 个写在 toolSeeds，常用工具在
+	// 三批种子合并处理：内容重的 5 个写在 toolSeeds，常用工具在
 	// seed_tools_more.go 的 extraToolSeeds，自研的 CMDB 平台在
-	// seed_tools_cmdb.go 的 cmdbToolSeeds，其授权签发中心在
-	// seed_tools_lic.go 的 licToolSeeds，幂等逻辑完全相同。
-	seeds := make([]toolSeed, 0, len(toolSeeds)+len(extraToolSeeds)+len(cmdbToolSeeds)+len(licToolSeeds))
+	// seed_tools_cmdb.go 的 cmdbToolSeeds，幂等逻辑完全相同。
+	// （CMDB 授权签发中心 2026-11-03 起对外下线，种子在 seed_tools_lic.go 备查，不再接入。）
+	seeds := make([]toolSeed, 0, len(toolSeeds)+len(extraToolSeeds)+len(cmdbToolSeeds))
 	seeds = append(seeds, toolSeeds...)
 	seeds = append(seeds, extraToolSeeds...)
 	seeds = append(seeds, cmdbToolSeeds...)
-	seeds = append(seeds, licToolSeeds...)
 
 	for _, s := range seeds {
 		var existing model.Tool
