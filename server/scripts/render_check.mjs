@@ -1249,6 +1249,85 @@ if (adminOk) {
     expertWbHtml.includes('还没有通过认证') && expertWbHtml.includes('#/expert/apply'));
 }
 
+/* ------------------------------------------- 成长路径 / 值班巡检（第四批） -- */
+
+const pathsMod = await load('pages-paths.js');
+const pathsData = await load('paths-data.js');
+
+const pathsHtml = await renderPage('成长路径总览', () => pathsMod.pathsPage(ctx('')));
+check('成长路径：六条路线全部列出',
+  pathsData.PATHS.length === 6 && pathsData.PATHS.every((p) => pathsHtml.includes(p.name)),
+  `${pathsData.PATHS.length} 条`);
+check('成长路径：总览给总进度与入口',
+  pathsHtml.includes('pt-ring') && pathsHtml.includes('pt-ov-btn'));
+// 进度只在本机这件事必须写出来。不写就是默认用户以为云同步，
+// 换台电脑发现进度没了会怀疑平台丢数据。
+check('成长路径：明确说明进度不跨设备同步',
+  pathsHtml.includes('换设备不会同步'));
+check('成长路径：卡片链接到各自的详情',
+  pathsData.PATHS.every((p) => pathsHtml.includes(`#/paths/${p.id}`)));
+
+const firstPath = pathsData.PATHS[0];
+const pathDetail = await renderPage('成长路径详情', () => pathsMod.pathDetailPage(ctx(''), firstPath.id));
+check('成长路径：详情渲染出全部阶段',
+  firstPath.stages.every((s) => pathDetail.includes(s.name)),
+  `${firstPath.stages.length} 个阶段`);
+check('成长路径：每个阶段都有关过标准',
+  pathDetail.includes('过关标准') && firstPath.stages.every((s) => pathDetail.includes(s.goal)));
+check('成长路径：首个未完成阶段被标为当前阶段',
+  pathDetail.includes('当前阶段') && pathDetail.includes('is-current'));
+check('成长路径：资源链接全部指向站内路由',
+  pathsData.PATHS.every((p) => p.stages.every((s) => s.resources.every((r) => r.href.startsWith('#/')))));
+
+// 跳过的阶段要能记住：写入本地存储后重渲染，百分比与「已完成」徽章都要跟着变。
+localStorage.setItem('opskb.paths.v1', JSON.stringify({ [firstPath.id]: { done: [firstPath.stages[0].id] } }));
+const pathAfter = await renderPage('成长路径详情（已完成 1 阶段）',
+  () => pathsMod.pathDetailPage(ctx(''), firstPath.id));
+check('成长路径：勾选后进度与徽章同步更新',
+  pathAfter.includes('已完成') && pathAfter.includes('is-done'));
+check('成长路径：进度统计与阶段数一致',
+  pathsMod.pathStats(firstPath).percent === Math.round((1 / firstPath.stages.length) * 100),
+  `${pathsMod.pathStats(firstPath).percent}%`);
+localStorage.removeItem('opskb.paths.v1');
+
+const pathMissing = await renderPage('成长路径（不存在的 id）',
+  () => pathsMod.pathDetailPage(ctx(''), 'not-a-path'));
+check('成长路径：未知路线给引导不抛错', pathMissing.includes('路线不存在'));
+
+// 首页的「从这里开始」是本批功能唯一的突出位置，位置与内容都要守：
+// 内容块挂在栏目卡之后，否则它会和 hero 抢首屏。
+const hpStart = homeHtml.indexOf('hp-path');
+check('首页：成长路径引导块存在且位于栏目卡之后',
+  hpStart > homeHtml.indexOf('channel-grid') && hpStart > 0);
+check('首页：四个高频工具入口齐全',
+  ['速查手册', '排障剧本', '值班巡检', '模拟考'].every((s) => homeHtml.includes(s))
+    && (homeHtml.match(/hp-quick-item/g) || []).length === 4);
+
+const clMod = await load('pages-checklist.js');
+const clData = await load('checklist-data.js');
+
+const clHtml = await renderPage('值班巡检（默认日检）', () => clMod.checklistPage(ctx('')));
+check('值班巡检：三档清单都可切换',
+  ['日检', '周检', '月检'].every((s) => clHtml.includes(s)) && clHtml.includes('data-cl-tab'));
+check('值班巡检：日检项数与数据一致',
+  clData.itemCountOf(clData.CHECKLISTS[0]) === 12, `${clData.itemCountOf(clData.CHECKLISTS[0])} 项`);
+check('值班巡检：每项都带可复制命令', (clHtml.match(/data-copy=/g) || []).length
+  === clData.itemCountOf(clData.CHECKLISTS[0]));
+// 只有命令没有判定标准，清单就退化成速查表的复制品——这条守的是"有判定"
+check('值班巡检：每项都写了判定标准',
+  (clHtml.match(/class="cl-expect"/g) || []).length === clData.itemCountOf(clData.CHECKLISTS[0]));
+check('值班巡检：必检项有醒目标记', clHtml.includes('cl-crit') && clHtml.includes('必检'));
+check('值班巡检：未勾完时提示剩余必检项',
+  clHtml.includes('cl-hero-alert') && clHtml.includes('个必检项没勾'));
+check('值班巡检：提供导出交接与清空', clHtml.includes('data-cl-export') && clHtml.includes('data-cl-reset'));
+
+const clWeekly = await renderPage('值班巡检（周检）', () => clMod.checklistPage(ctx('t=weekly')));
+check('值班巡检：切档渲染的是另一套项',
+  clWeekly !== clHtml && clWeekly.includes('周检')
+    && clWeekly.includes(clData.CHECKLISTS[1].groups[0].items[0].name));
+check('值班巡检：未知档位回落到日检',
+  (await renderPage('值班巡检（未知档）', () => clMod.checklistPage(ctx('t=nope')))).includes('日检'));
+
 /* ------------------------------------------------------------ 汇总 -- */
 
 let bad = 0;

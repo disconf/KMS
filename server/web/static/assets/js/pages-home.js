@@ -4,9 +4,11 @@
    ========================================================================= */
 
 import { api } from './api.js';
-import { esc, fmtNum } from './util.js';
+import { esc, fmtNum, icon } from './util.js';
 import { channelCardHTML, postCardHTML, resourceItemHTML, sectionHeadHTML, toolCardHTML } from './cards.js';
 import { emptyHTML } from './ui.js';
+import { FLAGS } from './flags.js';
+import { overallStats } from './pages-paths.js';
 
 export async function homePage(ctx) {
   const channels = ctx.state.channels || [];
@@ -54,6 +56,8 @@ export async function homePage(ctx) {
       </div>
     </section>
 
+    ${startHereHTML()}
+
     <section class="section">
       ${sectionHeadHTML('最新教程', '#/channel/linux-tutorial')}
       <div class="post-list">
@@ -94,6 +98,56 @@ function statHTML(value, label) {
     <strong class="num">${fmtNum(value)}</strong>
     <span>${esc(label)}</span>
   </div>`;
+}
+
+/**
+ * 「从这里开始」区块：成长路径大卡 + 四个高频工具入口。
+ *
+ * 放在栏目卡之后、内容流之前——首页最容易犯的错是把用户丢进一堆列表里，
+ * 让他自己找入口。这里给的是「按顺序学」和「马上要用的四个工具」两条明确路径，
+ * 也是本批功能唯一需要的突出位置：不占顶栏也能被看见。
+ */
+function startHereHTML() {
+  // 路径收起时整块不出现；巡检单独收起时只摘掉那张卡，路径引导保留
+  if (!FLAGS.paths) return '';
+  const ov = overallStats();
+  const quick = [
+    { href: '#/cheatsheet', ic: 'terminal', name: '速查手册', desc: '128 条命令即点即抄', on: true },
+    { href: '#/runbook',    ic: 'activity', name: '排障剧本', desc: '11 个场景的决策树', on: FLAGS.runbook },
+    { href: '#/checklist',  ic: 'shield',   name: '值班巡检', desc: '日检 12 项打勾交接', on: FLAGS.checklist },
+    { href: '#/exam',       ic: 'target',   name: '模拟考',   desc: '限时整卷 + 弱项分析', on: FLAGS.exam },
+  ].filter((q) => q.on);
+
+  return `<section class="section hp-start">
+    <a class="hp-path" href="#/paths">
+      <div class="hp-path-main">
+        <p class="hp-path-eyebrow">${icon('layers', 13)} 不知道从哪开始</p>
+        <h2>按路线走一遍：从能上手，到能独立值班</h2>
+        <p class="hp-path-desc">六条路线把教程、题库、排障剧本和速查手册串成一条线，
+          每个阶段都有可验证的过关标准，学完一节就能当天用上。</p>
+        <span class="hp-path-tags">
+          <i>Linux 基本功</i><i>Nginx 接入</i><i>数据库</i><i>Kubernetes</i><i>监控体系</i><i>SRE 复盘</i>
+        </span>
+      </div>
+      <div class="hp-path-side">
+        <div class="hp-path-ring" style="--ring-pct:${ov.percent}%">
+          <div class="hp-path-ring-hole"><strong>${ov.percent}<span>%</span></strong></div>
+        </div>
+        <p class="hp-path-foot">${ov.done}/${ov.total} 阶段已走完</p>
+        <span class="hp-path-go">${ov.started ? '继续' : '开始'}${icon('right', 13)}</span>
+      </div>
+    </a>
+
+    <div class="hp-quick">
+      ${quick.map((q) => `<a class="hp-quick-item" href="${esc(q.href)}">
+        <span class="hp-quick-ic">${icon(q.ic, 18)}</span>
+        <span class="hp-quick-main">
+          <strong>${esc(q.name)}</strong>
+          <small>${esc(q.desc)}</small>
+        </span>
+      </a>`).join('')}
+    </div>
+  </section>`;
 }
 
 /** 两个文章类栏目的条数之和，用于首页顶部统计。 */

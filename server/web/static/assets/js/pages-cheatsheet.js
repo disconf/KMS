@@ -6,6 +6,7 @@
 
 import { esc, icon } from './util.js';
 import { SHEETS } from './cheatsheet-data.js';
+import { FLAGS } from './flags.js';
 
 /** 展开后的扁平条目（带所属分类），搜索用。 */
 const ALL_ITEMS = SHEETS.flatMap((s) =>
@@ -84,6 +85,8 @@ export async function cheatsheetPage(ctx) {
       ${SHEETS.map((s) => `
         <button class="btn btn-sm ${s.slug === cat ? 'btn-primary' : ''}" type="button"
                 data-cs-cat="${s.slug}">${esc(s.name)}</button>`).join('')}
+      ${FLAGS.checklist ? `<a class="btn btn-sm cs-check" href="#/checklist"
+         title="交班前过一遍清单">${icon('shield', 13)}今日巡检</a>` : ''}
     </div>
 
     <div class="cs-body" data-cs-body>${bodyHTML(cat, query)}</div>

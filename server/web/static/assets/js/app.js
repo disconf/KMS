@@ -25,6 +25,8 @@ import { cheatsheetPage } from './pages-cheatsheet.js';
 import { toolboxPage } from './pages-toolbox.js';
 import { weeklyPage } from './pages-weekly.js';
 import { growthPage } from './pages-growth.js';
+import { pathsPage, pathDetailPage } from './pages-paths.js';
+import { checklistPage } from './pages-checklist.js';
 import { examHomePage, examRunPage } from './pages-exam.js';
 import { runbookListPage, runbookDetailPage } from './pages-runbook.js';
 import { FLAGS } from './flags.js';
@@ -110,6 +112,14 @@ const ROUTES = [
   // 成长中心：等级徽章 + 贡献榜。游客可读（榜单是公开的），
   // 只是没有"我的名次"与流水——页面自己处理未登录形态。
   { re: /^\/growth$/,            page: (ctx) => growthPage(ctx) },
+
+  // 成长路径：/paths 是六条路线的总览，/paths/:id 是单条路线的时间轴。
+  // 进度记在 localStorage，所以这两页对游客完全可用。
+  { re: /^\/paths$/,             page: (ctx) => pathsPage(ctx) },
+  { re: /^\/paths\/([^/]+)$/,    page: (ctx, m) => pathDetailPage(ctx, decodeSegment(m[1])) },
+
+  // 值班巡检：?t=daily|weekly|monthly 切档，勾选记在本地，换班靠导出交接记录。
+  { re: /^\/checklist$/,         page: (ctx) => checklistPage(ctx) },
 
   { re: /^\/me$/,                page: (ctx) => mePage(ctx) },
   { re: /^\/contribute$/,        page: (ctx) => contributePage(ctx) },
@@ -403,6 +413,16 @@ function renderNav(path) {
     active: path === '/qa' || path.startsWith('/qa/'),
   }));
 
+  // 成长路径紧跟问答广场：一个是"问别人"，一个是"自己按顺序学"，
+  // 都是内容入口，摆在一起用户才知道两条路都存在。
+  if (FEATURES.paths) {
+    items.push(navItemHTML({
+      name: '成长路径',
+      href: '#/paths',
+      active: path === '/paths' || path.startsWith('/paths/'),
+    }));
+  }
+
   // 效率三件套（FLAGS 单独开关）：日常高频入口，摆在内容栏目同排。
   if (FEATURES.cheatsheet) {
     items.push(navItemHTML({
@@ -425,6 +445,14 @@ function renderNav(path) {
       name: '工具箱',
       href: '#/toolbox',
       active: path === '/toolbox',
+    }));
+  }
+  // 巡检紧跟排障剧本：顺序就是值班时的动作顺序——查命令 → 按剧本排查 → 日常巡检。
+  if (FEATURES.checklist) {
+    items.push(navItemHTML({
+      name: '值班巡检',
+      href: '#/checklist',
+      active: path === '/checklist',
     }));
   }
   if (FEATURES.weekly) {

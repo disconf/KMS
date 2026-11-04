@@ -6,9 +6,10 @@
  * 能说明"为什么"和"多久能通过"的落点。弹窗只够提示，不够解释。
  */
 import { api, currentUser, isLoggedIn, refreshProfile } from './api.js';
-import { BADGE_LEVELS, badgeOf } from './flags.js';
+import { BADGE_LEVELS, badgeOf, FLAGS } from './flags.js';
 import { emptyHTML, toastError, toastOk } from './ui.js';
 import { esc, fmtDate, fmtNum, icon } from './util.js';
+import { overallStats } from './pages-paths.js';
 
 const SPEAK_META = {
   none: { label: '只读', tone: 'warn', desc: '可以浏览全部内容，不能提问、回答、评论或投稿。' },
@@ -51,7 +52,7 @@ export async function mePage() {
   return {
     title: '我的账号',
     html: pageHead('我的账号', '账号资料、成长等级与发言权限。')
-      + `<div class="me-page">${profileCard(user)}${growthCardHTML(growth)}${speakCard(state, user)}</div>`,
+      + `<div class="me-page">${profileCard(user)}${growthCardHTML(growth)}${pathCardHTML()}${speakCard(state, user)}</div>`,
     mount: (root) => bindApply(root, state),
   };
 }
@@ -96,8 +97,29 @@ function growthCardHTML(growth) {
   </a>`;
 }
 
-/** 拉取发言状态，失败时降级成"未知但按只读处理"。 */
-async function safeSpeakState() {
+/**
+ * 成长路径卡：只显示总进度与当前正在走的那条路线。
+ *
+ * 不在这里列出六条路线的明细——那是 #/paths 的活。个人中心只回答
+ * 「我学到哪了」，点进去才需要选择。
+ */
+function pathCardHTML() {
+  if (!FLAGS.paths) return '';
+  const ov = overallStats();
+  const sub = ov.done
+    ? `已完成 ${ov.done}/${ov.total} 个阶段 · 继续往下走`
+    : '还没开始 · 六条路线从 Linux 基本功起步';
+  return `<a class="card me-growth" href="#/paths">
+    <span class="me-growth-ic is-path">${icon('layers', 20)}</span>
+    <span class="me-growth-main">
+      <span class="me-growth-title">成长路径 · ${ov.percent}%</span>
+      <span class="me-growth-sub">${esc(sub)}</span>
+    </span>
+    <span class="me-growth-go">查看路线${icon('right', 14)}</span>
+  </a>`;
+}
+
+/** 拉取发言状态，失败时降级成"未知但按只读处理"。 */async function safeSpeakState() {
   try {
     const data = await api.speakState();
     return {
