@@ -67,6 +67,7 @@ const ADMIN_NAV = [
   { href: '#/admin/finance',   label: '对账',     test: (p) => p.startsWith('/admin/finance') },
   { href: '#/admin/orders',    label: '订单',     test: (p) => p.startsWith('/admin/orders') },
   { href: '#/admin/users',     label: '用户',     test: (p) => p.startsWith('/admin/users') },
+  { href: '#/admin/mall',      label: '积分商城', test: (p) => p.startsWith('/admin/mall') },
   { href: '#/admin/speak',     label: '发言权限', test: (p) => p.startsWith('/admin/speak') },
   { href: '#/admin/settings',  label: '配置',     test: (p) => p.startsWith('/admin/settings') },
 ];
@@ -3900,6 +3901,261 @@ function openQaRejectModal(id) {
       } catch (err) {
         submit.disabled = false;
         toastError(err.message || '操作失败');
+      }
+    });
+  });
+}
+
+/* ============================================================================
+   积分商城后台。
+   商品是运营手填的配置，错误主要发生在三类：价格填 0、类型漏选、
+   发放时忘写凭证——表单校验与发放弹窗分别把这三处堵住。
+   ========================================================================= */
+
+const MALL_KINDS = [
+  { v: 'download', label: '下载解锁' },
+  { v: 'template', label: '模板文档' },
+  { v: 'code',     label: '兑换码' },
+  { v: 'benefit',  label: '站内权益' },
+];
+
+const MALL_REDEEM_STATUS = {
+  pending:   { label: '待发放', chip: 'chip-warn' },
+  fulfilled: { label: '已发放', chip: 'chip-ok' },
+  cancelled: { label: '已取消', chip: '' },
+};
+
+export async function adminMallPage(ctx) {
+  const gate = adminGate();
+  if (gate) return gate;
+
+  const tab = ctx.params.get('tab') === 'redemptions' ? 'redemptions' : 'items';
+  const page = Math.max(1, Number(ctx.params.get('page')) || 1);
+  const pageSize = 20;
+  const status = ctx.params.get('status') || '';
+
+  const [items, redemptions] = await Promise.all([
+    api.adminMallItems().catch(() => null),
+    tab === 'redemptions'
+      ? api.adminMallRedemptions({ status, page, pageSize }).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  const tabs = `
+    <div class="admin-tabs">
+      <a class="admin-tab ${tab === 'items' ? 'is-active' : ''}" href="#/admin/mall">商品</a>
+      <a class="admin-tab ${tab === 'redemptions' ? 'is-active' : ''}" href="#/admin/mall?tab=redemptions">兑换单</a>
+    </div>`;
+
+  let body;
+  if (tab === 'items') {
+    body = mallItemsTab(items);
+  } else {
+    body = mallRedemptionsTab(redemptions, status, page, pageSize);
+  }
+
+  return {
+    title: '积分商城',
+    html: adminShell('/admin/mall', {
+      title: '积分商城',
+      desc: '商品配置与兑换单发放。取消待发放的单会自动全额退分，已发放的不能取消。',
+      actions: tab === 'items'
+        ? '<button class="btn btn-primary" type="button" data-act="new-item">新建商品</button>'
+        : '',
+      body: tabs + body,
+    }),
+    mount: (root) => {
+      bindPager(root, (p) => setHashQuery({ page: p > 1 ? String(p) : '' }, { keepPage: true }));
+      bindAdminMall(root);
+    },
+  };
+}
+
+function mallItemsTab(items) {
+  if (!items) return errorShell('商品列表加载失败');
+  const rows = (items.items || []).map((it) => {
+    const kind = MALL_KINDS.find((k) => k.v === it.kind) || { label: it.kind };
+    return `<tr>
+      <td>
+        <div class="admin-cell-title">${esc(it.title)}</div>
+        ${it.description ? `<div class="admin-cell-sub">${esc(it.description)}</div>` : ''}
+      </td>
+      <td>${esc(kind.label)}</td>
+      <td class="admin-num">${fmtNum(it.pointsCost)} 分</td>
+      <td>${it.unlimited ? '不限量' : `${fmtNum(it.stock)} 件${it.soldOut ? '（已罄）' : ''}`}</td>
+      <td>${it.active ? '<span class="chip chip-ok">上架</span>' : '<span class="chip">下架</span>'}</td>
+      <td class="admin-ops">
+        <button class="btn btn-sm" type="button" data-edit="${it.id}">编辑</button>
+        <button class="btn btn-sm btn-danger" type="button" data-del="${it.id}">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="card admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>商品</th><th>类型</th><th class="admin-num">价格</th><th>库存</th><th>状态</th><th class="admin-ops">操作</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="6"><p class="muted-note">还没有商品，点右上角「新建商品」上架第一个。</p></td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
+
+function mallRedemptionsTab(data, status, page, pageSize) {
+  if (!data) return errorShell('兑换单加载失败');
+  const statusOpts = ['', 'pending', 'fulfilled', 'cancelled'].map((v) => `
+    <option value="${v}" ${v === status ? 'selected' : ''}>${v ? esc(MALL_REDEEM_STATUS[v].label) : '全部状态'}</option>`).join('');
+
+  const rows = (data.list || []).map((r) => {
+    const st = MALL_REDEEM_STATUS[r.status] || { label: r.status, chip: '' };
+    return `<tr>
+      <td class="admin-num">#${r.id}</td>
+      <td>${esc(r.userId)}</td>
+      <td>
+        <div class="admin-cell-title">${esc(r.itemTitle)}</div>
+        <div class="admin-cell-sub">${fmtDateTime(r.createdAt)} · ${fmtNum(r.pointsCost)} 分</div>
+      </td>
+      <td><span class="chip ${st.chip}">${esc(st.label)}</span></td>
+      <td>${r.remark ? esc(r.remark) : '—'}</td>
+      <td class="admin-ops">
+        ${r.status === 'pending' ? `
+          <button class="btn btn-sm btn-primary" type="button" data-fulfill="${r.id}">发放</button>
+          <button class="btn btn-sm" type="button" data-cancel="${r.id}">取消退分</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <form class="toolbar admin-filters" data-filter>
+      <select class="select" name="status">${statusOpts}</select>
+      <button class="btn btn-sm" type="submit">${icon('search', 14)}筛选</button>
+    </form>
+    <div class="card admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>单号</th><th>用户</th><th>商品</th><th>状态</th><th>凭证</th><th class="admin-ops">操作</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="6"><p class="muted-note">没有匹配的兑换单。</p></td></tr>'}</tbody>
+      </table>
+    </div>
+    <div class="admin-pager">${pagerHTML({ page, pageSize, total: data.total || 0 })}</div>`;
+}
+
+function errorShell(msg) {
+  return `<div class="card"><p class="muted-note">${esc(msg)}，刷新重试。</p></div>`;
+}
+
+function bindAdminMall(root) {
+  root.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-act="new-item"]')) { openItemModal(null); return; }
+    const edit = e.target.closest('[data-edit]');
+    if (edit) {
+      const items = await api.adminMallItems().catch(() => null);
+      const item = items && (items.items || []).find((x) => String(x.id) === edit.getAttribute('data-edit'));
+      if (item) openItemModal(item);
+      return;
+    }
+    const del = e.target.closest('[data-del]');
+    if (del && window.confirm('删除后兑换单仍保留商品名快照，确认删除商品？')) {
+      try { await api.adminMallDeleteItem(del.getAttribute('data-del')); toastOk('已删除'); window.__reloadPage(); }
+      catch (err) { toastError(err.message || '删除失败'); }
+      return;
+    }
+    const fulfill = e.target.closest('[data-fulfill]');
+    if (fulfill) { openFulfillModal(fulfill.getAttribute('data-fulfill')); return; }
+    const cancel = e.target.closest('[data-cancel]');
+    if (cancel && window.confirm('取消将全额退分给用户，确认取消这张兑换单？')) {
+      const reason = window.prompt('取消原因（必填，用户可在记录里看到）');
+      if (reason === null) return;
+      try { await api.adminMallCancel(cancel.getAttribute('data-cancel'), { reason }); toastOk('已取消并退分'); window.__reloadPage(); }
+      catch (err) { toastError(err.message || '取消失败'); }
+    }
+  });
+}
+
+/** 商品新建/编辑弹窗。编辑时把原值填进表单。 */
+function openItemModal(item) {
+  const kindOpts = MALL_KINDS.map((k) => `
+    <option value="${k.v}" ${item && item.kind === k.v ? 'selected' : ''}>${k.label}</option>`).join('');
+  openModal(`
+    <div class="modal-head"><h2>${item ? '编辑商品' : '新建商品'}</h2></div>
+    <div class="modal-body">
+      <label class="field"><span class="field-label">商品名称 *</span>
+        <input class="input" data-f="title" maxlength="80" value="${item ? esc(item.title) : ''}" placeholder="例如：Linux 常用命令速查手册（PDF）"></label>
+      <label class="field"><span class="field-label">兑换说明</span>
+        <input class="input" data-f="description" maxlength="500" value="${item ? esc(item.description) : ''}" placeholder="一句话说明换到的是什么"></label>
+      <div class="mall-form-grid">
+        <label class="field"><span class="field-label">类型 *</span>
+          <select class="select" data-f="kind">${kindOpts}</select></label>
+        <label class="field"><span class="field-label">所需积分 *</span>
+          <input class="input" data-f="pointsCost" type="number" min="1" value="${item ? item.pointsCost : ''}" placeholder="正整数"></label>
+        <label class="field"><span class="field-label">库存</span>
+          <input class="input" data-f="stock" type="number" min="0" value="${item && !item.unlimited ? item.stock : ''}" ${item && item.unlimited ? 'disabled' : ''}></label>
+        <label class="field"><span class="field-label">排序（小的在前）</span>
+          <input class="input" data-f="sort" type="number" value="${item ? item.sort : 0}"></label>
+      </div>
+      <label class="check-row"><input type="checkbox" data-f="unlimited" ${item && item.unlimited ? 'checked' : ''}> 不限量（虚拟权益建议勾选）</label>
+      <label class="check-row"><input type="checkbox" data-f="active" ${!item || item.active ? 'checked' : ''}> 上架</label>
+      <label class="field"><span class="field-label">发放说明（兑换成功后展示给用户）</span>
+        <input class="input" data-f="redeemNote" maxlength="300" value="${item ? esc(item.redeemNote) : ''}" placeholder="例如：兑换码将在 24 小时内发放"></label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" type="button" data-close>取消</button>
+      <button class="btn btn-primary" type="button" data-save>保存</button>
+    </div>
+  `, (modal) => {
+    modal.querySelector('[data-close]').addEventListener('click', closeModal);
+    const unlimited = modal.querySelector('[data-f="unlimited"]');
+    const stock = modal.querySelector('[data-f="stock"]');
+    unlimited.addEventListener('change', () => { stock.disabled = unlimited.checked; });
+    modal.querySelector('[data-save]').addEventListener('click', async () => {
+      const val = (name) => modal.querySelector(`[data-f="${name}"]`).value.trim();
+      const payload = {
+        title: val('title'),
+        description: val('description'),
+        kind: val('kind'),
+        pointsCost: Number(val('pointsCost')) || 0,
+        stock: Number(val('stock')) || 0,
+        unlimited: unlimited.checked,
+        active: modal.querySelector('[data-f="active"]').checked,
+        sort: Number(val('sort')) || 0,
+        redeemNote: val('redeemNote'),
+      };
+      try {
+        if (item) await api.adminMallUpdateItem(item.id, payload);
+        else await api.adminMallCreateItem(payload);
+        closeModal();
+        toastOk('已保存');
+        window.__reloadPage();
+      } catch (err) {
+        toastError(err.message || '保存失败');
+      }
+    });
+  }, { className: 'is-wide' });
+}
+
+/** 发放弹窗：凭证必填。 */
+function openFulfillModal(id) {
+  openModal(`
+    <div class="modal-head"><h2>发放兑换单 #${esc(id)}</h2></div>
+    <div class="modal-body">
+      <label class="field"><span class="field-label">发放凭证 *</span>
+        <input class="input" data-remark maxlength="500" placeholder="兑换码 / 文件链接 / 说明，用户可见"></label>
+      <p class="mall-fulfill-tip">凭证会原样展示在用户的兑换记录里，务必填写可用的内容。</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" type="button" data-close>取消</button>
+      <button class="btn btn-primary" type="button" data-go>确认发放</button>
+    </div>
+  `, (modal) => {
+    modal.querySelector('[data-close]').addEventListener('click', closeModal);
+    modal.querySelector('[data-go]').addEventListener('click', async () => {
+      const remark = modal.querySelector('[data-remark]').value.trim();
+      if (!remark) { toastError('请填写发放凭证'); return; }
+      try {
+        await api.adminMallFulfill(id, { remark });
+        closeModal();
+        toastOk('已发放');
+        window.__reloadPage();
+      } catch (err) {
+        toastError(err.message || '发放失败');
       }
     });
   });

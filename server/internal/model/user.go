@@ -89,10 +89,11 @@ type User struct {
 	LastLoginAt *time.Time `gorm:"comment:最近登录时间" json:"lastLoginAt"`
 	LastLoginIP string     `gorm:"size:64;comment:最近登录 IP" json:"-"`
 
-	// ContributionPoints 社区贡献积分，只做展示（徽章/等级），不兑换任何权益。
+	// ContributionPoints 社区贡献积分。
 	//
-	// 冗余在用户表是为了列表与回答卡片能直接带出等级：一页 20 条回答
-	// 逐条去 point_logs 求和，为的只是画一个小徽章，不值。
+	// 以前是纯展示数据（徽章/等级）；引入积分商城后它有了消费出口——
+	// 兑换会在这里扣减（CAS 防负），取消发货会加回。
+	// 不变的是对账纪律：point_logs 求和必须能还原这个值，
 	// 流水（point_logs）才是真相，这里是它的物化结果。
 	ContributionPoints int64 `gorm:"default:0;comment:贡献积分（展示用）" json:"contributionPoints"`
 }

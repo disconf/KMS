@@ -159,6 +159,14 @@ var (
 	ErrSpeakApplyState  = New(20028, "该申请已审核完成，不可重复审核", http.StatusConflict)
 	ErrSpeakApplyAbsent = New(20029, "请先提交实名申请", http.StatusForbidden)
 	ErrSpeakApplyNote   = New(20030, "请填写申请理由", http.StatusBadRequest)
+
+	// 开放 API 密钥。密钥是一种登录凭证，鉴权失败走 401 的语义与令牌一致：
+	// 脚本拿到 401 应该提示用户去重新生成密钥，而不是无脑重试。
+	ErrAPIKeyInvalid = New(20031, "API 密钥无效", http.StatusUnauthorized)
+	ErrAPIKeyRevoked = New(20032, "API 密钥已被吊销，请到开发者页重新生成", http.StatusUnauthorized)
+	ErrAPIKeyBanned  = New(20033, "账号已被封禁，密钥同步失效", http.StatusForbidden)
+	ErrAPIKeyLimit   = New(20034, "最多保留 10 个有效密钥，请先吊销不再使用的", http.StatusConflict)
+	ErrAPIKeyAbsent  = New(20035, "API 密钥不存在", http.StatusNotFound)
 )
 
 // ============================ 用户与专家 3xxxx ============================
@@ -275,6 +283,22 @@ var (
 	ErrQaTitleTooShort      = New(45009, "标题至少 6 个字，把故障现象写清楚一些", http.StatusBadRequest)
 	ErrQaContentTooShort    = New(45010, "内容太短了，至少 10 个字", http.StatusBadRequest)
 	ErrQaAnswerRejected     = New(45011, "该回答未通过审核", http.StatusForbidden)
+)
+
+// ============================ 积分商城 46xxx ============================
+//
+// 借 4xxxx 的用户激励段：商城是内容的配套激励（用投稿攒的分化换权益），
+// 不是资金链路——积分不可提现、不可转让，因此不进 5xxxx 订单段。
+
+var (
+	ErrMallItemNotFound  = New(46001, "商品不存在或已下架", http.StatusNotFound)
+	ErrMallPointsShort   = New(46002, "积分不足，去回答问题或投稿教程攒分吧", http.StatusBadRequest)
+	ErrMallStockEmpty    = New(46003, "手慢了，库存刚被抢完", http.StatusConflict)
+	ErrMallRedemption404 = New(46004, "兑换单不存在", http.StatusNotFound)
+	ErrMallRedemptionBad = New(46005, "兑换单状态已变化，请刷新后重试", http.StatusConflict)
+	ErrMallCostInvalid   = New(46006, "积分价格必须是正数", http.StatusBadRequest)
+	ErrMallTitleRequired = New(46007, "请填写商品名称", http.StatusBadRequest)
+	ErrMallKindInvalid   = New(46008, "商品类型不合法", http.StatusBadRequest)
 )
 
 // ============================ 问题与订单 5xxxx ============================

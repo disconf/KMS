@@ -222,6 +222,13 @@ func run() error {
 		payProvider, cfg.Payment, settingSvc,
 	)
 
+	// 积分商城：积分的第一个消费出口。扣分事务在 MallRepo，
+	// 服务层只做校验与提示翻译。
+	mallSvc := service.NewMallService(repository.NewMallRepo(db), pointRepo)
+
+	// 开放 API 密钥：用户脚本调只读接口的凭证。
+	apiKeySvc := service.NewApiKeyService(repository.NewApiKeyRepo(db), userRepo)
+
 	engine := router.New(router.Options{
 		Cfg:       cfg,
 		DB:        db,
@@ -246,6 +253,12 @@ func run() error {
 		Settings:  settingSvc,
 		Skills:    skillAdminSvc,
 		Speak:     service.NewSpeakService(userRepo, repository.NewAuditRepo(db)),
+		Mall:      mallSvc,
+		APIKeys:   apiKeySvc,
+		// 开放只读接口直接读库：它们是内容接口的"瘦版"，不需要经过
+		// 前台服务层的个性化逻辑，仓储方法本身已保证只出已发布内容。
+		ArticleStore: articleRepo,
+		QuizStore:    quizRepo,
 	})
 
 	// 三个周期任务都关乎"钱"或"名额"，缺一个就会有单子烂在库里：

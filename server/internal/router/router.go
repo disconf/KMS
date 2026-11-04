@@ -47,6 +47,13 @@ type Options struct {
 	// Users 供认证中间件复核账号状态（封禁即时生效）。
 	// 它是必填项：漏传会让中间件无法判断账号是否可用，等于封禁不生效。
 	Users *repository.UserRepo
+
+	// Mall 积分商城；APIKeys 开放 API 密钥管理。
+	Mall    *service.MallService
+	APIKeys *service.ApiKeyService
+	// ArticleStore / QuizStore 供 /open/v1 只读接口直读（见 openapi_handler 注释）。
+	ArticleStore *repository.ArticleRepo
+	QuizStore    *repository.QuizRepo
 }
 
 // authMW 返回强制登录中间件。
@@ -95,6 +102,9 @@ func New(opt Options) *gin.Engine {
 	registerQaRoutes(v1, opt)
 	registerOrderRoutes(v1, opt)
 	registerAdminRoutes(v1, opt)
+	registerMallRoutes(v1, opt)
+	registerAPIKeyRoutes(v1, opt)
+	registerOpenAPIRoutes(v1, opt)
 
 	return r
 }
@@ -565,4 +575,55 @@ func registerAdminRoutes(g *gin.RouterGroup, opt Options) {
 	skills.POST("", sh.CreateSkill)
 	skills.PUT("/:id", sh.UpdateSkill)
 	skills.DELETE("/:id", sh.DeleteSkill)
+
+	// 积分商城管理。商品 CRUD 与兑换单发放/取消。
+	mh := handler.NewAdminMallHandler(opt.Mall)
+	mall := admin.Group("/mall")
+	mall.GET("/items", mh.ListItems)
+	mall.POST("/items", mh.CreateItem)
+	mall.PUT("/items/:id", mh.UpdateItem)
+	mall.DELETE("/items/:id", mh.DeleteItem)
+	mall.GET("/redemptions", mh.ListRedemptions)
+	mall.POST("/redemptions/:id/fulfill", mh.Fulfill)
+	mall.POST("/redemptions/:id/cancel", mh.Cancel)
+}
+
+// registerMallRoutes 积分商城。
+//
+// 商品列表游客可读：商城本身是"攒分能换什么"的动机展示，
+// 挡在登录墙后面等于把广告撕了。兑换必须登录。
+func registerMallRoutes(g *gin.RouterGroup, opt Options) {
+	h := handler.NewMallHandler(opt.Mall)
+
+	guest := g.Group("/mall", middleware.OptionalAuth(opt.JWT, opt.Tokens))
+	guest.GET("/items", h.List)
+
+	authed := g.Group("/mall", opt.authMW())
+	authed.POST("/items/:id/redeem", h.Redeem)
+	authed.GET("/redemptions", h.MyRedemptions)
+}
+
+// registerAPIKeyRoutes 开放 API 密钥管理（用户侧，全部要求登录）。
+func registerAPIKeyRoutes(g *gin.RouterGroup, opt Options) {
+	h := handler.NewAPIKeyHandler(opt.APIKeys)
+	authed := g.Group("/me/apikeys", opt.authMW())
+	authed.GET("", h.List)
+	authed.POST("", h.Create)
+	authed.POST("/:id/revoke", h.Revoke)
+}
+
+// registerOpenAPIRoutes /open/v1 开放只读接口。
+//
+// 鉴权用密钥而不是 JWT：调用方是脚本，没有浏览器存储，
+// 长效密钥 + 吊销能力才是对脚本友好的凭证模型。
+// 前台登录态在这些接口里不生效——两套凭证分开，泄露时可以只吊密钥不换密码。
+func registerOpenAPIRoutes(g *gin.RouterGroup, opt Options) {
+	h := handler.NewOpenAPIHandler(opt.ArticleStore, opt.QuizStore)
+	guard := middleware.APIKeyAuth(opt.APIKeys)
+
+	open := g.Group("/open/v1", guard)
+	open.GET("/ping", h.Ping)
+	open.GET("/articles", h.ListArticles)
+	open.GET("/articles/:slug", h.ArticleDetail)
+	open.GET("/quizzes/random", h.RandomQuizzes)
 }

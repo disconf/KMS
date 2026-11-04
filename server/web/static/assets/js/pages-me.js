@@ -52,7 +52,7 @@ export async function mePage() {
   return {
     title: '我的账号',
     html: pageHead('我的账号', '账号资料、成长等级与发言权限。')
-      + `<div class="me-page">${profileCard(user)}${growthCardHTML(growth)}${pathCardHTML()}${speakCard(state, user)}</div>`,
+      + `<div class="me-page">${profileCard(user)}${growthCardHTML(growth)}${pathCardHTML()}${utilityCardsHTML()}${speakCard(state, user)}</div>`,
     mount: (root) => bindApply(root, state),
   };
 }
@@ -119,7 +119,36 @@ function pathCardHTML() {
   </a>`;
 }
 
-/** 拉取发言状态，失败时降级成"未知但按只读处理"。 */async function safeSpeakState() {
+/**
+ * 工具入口卡：积分商城与开发者页。
+ *
+ * 两张卡并排一行，不与成长卡抢视觉——成长是"你现在是谁"，
+ * 这两张是"你还能去哪"。开发者卡对没写脚本需求的人是噪音，
+ * 文案直接点明适用人群，让不需要的人一眼跳过。
+ */
+function utilityCardsHTML() {
+  return `<div class="me-utility">
+    <a class="card me-utility-item" href="#/mall">
+      <span class="me-growth-ic is-mall">${icon('coin', 18)}</span>
+      <span class="me-growth-main">
+        <span class="me-growth-title">积分商城</span>
+        <span class="me-growth-sub">用攒下的分换实际的东西</span>
+      </span>
+      <span class="me-growth-go">${icon('right', 14)}</span>
+    </a>
+    <a class="card me-utility-item" href="#/developer">
+      <span class="me-growth-ic is-dev">${icon('plug', 18)}</span>
+      <span class="me-growth-main">
+        <span class="me-growth-title">开放 API</span>
+        <span class="me-growth-sub">给巡检脚本一把钥匙</span>
+      </span>
+      <span class="me-growth-go">${icon('right', 14)}</span>
+    </a>
+  </div>`;
+}
+
+/** 拉取发言状态，失败时降级成"未知但按只读处理"。 */
+async function safeSpeakState() {
   try {
     const data = await api.speakState();
     return {

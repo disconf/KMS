@@ -630,4 +630,25 @@ export const api = {
   updateNewsSource:  (id, payload) => put(`/admin/news/sources/${encodeURIComponent(id)}`, payload),
   deleteNewsSource:  (id) => del(`/admin/news/sources/${encodeURIComponent(id)}`),
   fetchNewsSource:   (id) => post(`/admin/news/sources/${encodeURIComponent(id)}/fetch`),
+
+  /* ------------------------------------------------------ 积分商城 -- */
+  // 列表游客可读（商城是"攒分能换什么"的橱窗），兑换必须登录——
+  // 未登录时后端会回 401，这里不提前拦，让页面自己决定展示形态。
+  mallItems:      () => get('/mall/items'),
+  mallRedeem:     (id) => post(`/mall/items/${encodeURIComponent(id)}/redeem`),
+  mallRedemptions: (query) => get('/mall/redemptions' + qs(query || {})),
+
+  /* -------------------------------------------------- 开放 API 密钥 -- */
+  apiKeys:       () => get('/me/apikeys'),
+  createApiKey:  (name) => post('/me/apikeys', { name }),
+  revokeApiKey:  (id) => post(`/me/apikeys/${encodeURIComponent(id)}/revoke`),
+
+  // 商城后台：商品 CRUD 与兑换单发放/取消。
+  adminMallItems:       () => get('/admin/mall/items'),
+  adminMallCreateItem:  (payload) => post('/admin/mall/items', payload),
+  adminMallUpdateItem:  (id, payload) => put(`/admin/mall/items/${encodeURIComponent(id)}`, payload),
+  adminMallDeleteItem:  (id) => del(`/admin/mall/items/${encodeURIComponent(id)}`),
+  adminMallRedemptions: (query) => get('/admin/mall/redemptions' + qs(query || {})),
+  adminMallFulfill:     (id, payload) => post(`/admin/mall/redemptions/${encodeURIComponent(id)}/fulfill`, payload),
+  adminMallCancel:      (id, payload) => post(`/admin/mall/redemptions/${encodeURIComponent(id)}/cancel`, payload),
 };

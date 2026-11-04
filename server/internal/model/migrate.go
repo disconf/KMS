@@ -63,6 +63,13 @@ func AllModels() []any {
 		&AuditLog{},
 		&SystemSetting{},
 		&PointLog{},
+
+		// 积分商城。商品在前，兑换单引用它。
+		&MallItem{},
+		&MallRedemption{},
+
+		// 开放 API 密钥
+		&ApiKey{},
 	}
 }
 

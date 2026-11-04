@@ -28,6 +28,8 @@ import { growthPage } from './pages-growth.js';
 import { pathsPage, pathDetailPage } from './pages-paths.js';
 import { checklistPage } from './pages-checklist.js';
 import { examHomePage, examRunPage } from './pages-exam.js';
+import { mallPage, mallHistoryPage } from './pages-mall.js';
+import { developerPage } from './pages-developer.js';
 import { runbookListPage, runbookDetailPage } from './pages-runbook.js';
 import { FLAGS } from './flags.js';
 import {
@@ -40,7 +42,7 @@ import {
   adminResourcesPage, adminResourceLinksPage,
   adminQuizPage, adminExpertsPage, adminWithdrawalsPage, adminOrdersPage, adminUsersPage,
   adminSpeakApplicationsPage,
-  adminFinancePage, adminSettingsPage, adminQaPage,
+  adminFinancePage, adminSettingsPage, adminQaPage, adminMallPage,
 } from './pages-admin.js';
 import { initSearchBox } from './searchbox.js';
 
@@ -121,6 +123,12 @@ const ROUTES = [
   // 值班巡检：?t=daily|weekly|monthly 切档，勾选记在本地，换班靠导出交接记录。
   { re: /^\/checklist$/,         page: (ctx) => checklistPage(ctx) },
 
+  // 积分商城：橱窗游客可逛，兑换与记录要登录（页面自己分流）。
+  { re: /^\/mall$/,             page: (ctx) => mallPage(ctx) },
+  { re: /^\/mall\/history$/,   page: (ctx) => mallHistoryPage(ctx) },
+  // 开发者页：API 密钥管理。
+  { re: /^\/developer$/,        page: (ctx) => developerPage(ctx) },
+
   { re: /^\/me$/,                page: (ctx) => mePage(ctx) },
   { re: /^\/contribute$/,        page: (ctx) => contributePage(ctx) },
   { re: /^\/me\/contributions$/, page: (ctx) => myContributionsPage(ctx) },
@@ -160,6 +168,7 @@ const ROUTES = [
   { re: /^\/admin\/speak$/,                    page: (ctx) => adminSpeakApplicationsPage(ctx) },
   { re: /^\/admin\/finance$/,                  page: (ctx) => adminFinancePage(ctx) },
   { re: /^\/admin\/settings$/,                 page: (ctx) => adminSettingsPage(ctx) },
+  { re: /^\/admin\/mall$/,                     page: (ctx) => adminMallPage(ctx) },
 ];
 
 /* ------------------------------------------------------------- 启动 -- */
@@ -460,6 +469,16 @@ function renderNav(path) {
       name: '周报生成',
       href: '#/weekly',
       active: path === '/weekly',
+    }));
+  }
+
+  // 积分商城：攒分的去处。放在效率工具之后、专家之前——
+  // 它是"内容激励"入口，不是角色入口。
+  if (FEATURES.mall) {
+    items.push(navItemHTML({
+      name: '积分商城',
+      href: '#/mall',
+      active: path === '/mall' || path.startsWith('/mall/'),
     }));
   }
 

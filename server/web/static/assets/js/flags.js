@@ -53,6 +53,16 @@ export const FLAGS = {
    */
   paths: true,
   checklist: true,
+
+  /**
+   * 第五批：积分商城与开发者页。
+   *
+   * 商城让积分第一次有了消费出口（兑换走后端事务，扣分不可逆）；
+   * 开发者页是开放 API 的密钥管理入口。商城摆顶栏，开发者页只从
+   * 个人中心进——它是给写脚本的人用的，不是给所有读者的。
+   */
+  mall: true,
+  developer: true,
 };
 
 /** 徽章门槛，必须与 service.BadgeOf 的阈值一致。 */

@@ -478,8 +478,9 @@ check('成长中心：积分规则四条齐全',
 check('成长中心：游客看得到榜单但看不到我的流水',
   growthGuest.includes('贡献排行榜') && !growthGuest.includes('我的积分流水'));
 check('成长中心：未登录给登录引导', growthGuest.includes('登录后查看你的等级'));
-check('成长中心：说明积分不兑换权益（不做虚假承诺）',
-  growthGuest.includes('不兑换权益'));
+// 积分商城上线后口径变了：成长中心要说清"分能换什么"，并给商城入口。
+check('成长中心：说明积分有去处并链到商城',
+  growthGuest.includes('换成实际的东西') && growthGuest.includes('#/mall'));
 
 // 复盘栏目：引导条只在复盘栏目出现，教程栏目不该被塞进来。
 const pmListHtml = await renderPage('事故复盘栏目', () => article.articleListPage(ctx(), 'ops-postmortem'));
@@ -1327,6 +1328,42 @@ check('值班巡检：切档渲染的是另一套项',
     && clWeekly.includes(clData.CHECKLISTS[1].groups[0].items[0].name));
 check('值班巡检：未知档位回落到日检',
   (await renderPage('值班巡检（未知档）', () => clMod.checklistPage(ctx('t=nope')))).includes('日检'));
+
+/* ---------------------------------------------- 积分商城 / 开发者页（第五批） -- */
+
+const mallMod = await load('pages-mall.js');
+const devMod = await load('pages-developer.js');
+
+// 本节运行时 api.js 已带登录态（见「投稿与审核」节的说明），
+// 所以按登录形态断言；游客形态的分流由 e2e 覆盖。
+const mallAuthed = await renderPage('积分商城（登录态）', () => mallMod.mallPage(ctx('')));
+check('积分商城：登录后显示余额与记录入口',
+  mallAuthed.includes('当前可用积分') && mallAuthed.includes('#/mall/history'));
+check('积分商城：货架与空态二选一',
+  mallAuthed.includes('mall-grid') || mallAuthed.includes('货架整理中'));
+
+const mallHist = await renderPage('兑换记录（登录态）', () => mallMod.mallHistoryPage(ctx('')));
+check('兑换记录：登录后渲染列表或空态',
+  mallHist.includes('mall-history') || mallHist.includes('还没有兑换过'));
+
+const devAuthed = await renderPage('开发者页（登录态）', () => devMod.developerPage(ctx('')));
+check('开发者页：登录后给新建密钥动作',
+  devAuthed.includes('新建密钥') && devAuthed.includes('data-act="create-key"'));
+check('开发者页：接口速览与限流说明齐全',
+  devAuthed.includes('/open/v1/ping') && devAuthed.includes('dev-table') && devAuthed.includes('X-RateLimit-Remaining'));
+
+// 导航与我的页入口守开关（直接读源文件，别走 fetch——file:// 进不了桩）。
+const { readFileSync } = await import('node:fs');
+const srcOf = (name) => readFileSync(new URL(`../web/static/assets/js/${name}`, import.meta.url), 'utf8');
+const appSrc = srcOf('app.js');
+check('导航：积分商城入口受开关守卫',
+  appSrc.includes("FEATURES.mall") && appSrc.includes("'积分商城'"));
+check('路由：mall/developer/admin-mall 四条路由都已注册',
+  ['mallPage', 'mallHistoryPage', 'developerPage', 'adminMallPage'].every((fn) => appSrc.includes(fn)));
+
+const meSrc = srcOf('pages-me.js');
+check('我的页：商城与开发者入口受开关与权限分流',
+  meSrc.includes('utilityCardsHTML') && meSrc.includes('#/mall') && meSrc.includes('#/developer'));
 
 /* ------------------------------------------------------------ 汇总 -- */
 
