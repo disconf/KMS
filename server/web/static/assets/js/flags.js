@@ -18,6 +18,15 @@ export const FLAGS = {
    * 订单页、问答回答的专家角标都还在往那里跳转。
    */
   expertPlaza: false,
+
+  /**
+   * 运维效率三件套：速查手册 / 工具箱 / 周报生成器。
+   * 全部纯前端页面（本地计算，零接口依赖），入口摆出来不占后端资源；
+   * 哪个反响不好随时单独收起，路由保留。
+   */
+  cheatsheet: true,
+  toolbox: true,
+  weekly: true,
 };
 
 /** 徽章门槛，必须与 service.BadgeOf 的阈值一致。 */

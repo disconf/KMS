@@ -21,6 +21,9 @@ import { hallPage } from './pages-hall.js';
 import { contributePage, myContributionsPage } from './pages-contribute.js';
 import { mePage } from './pages-me.js';
 import { qaListPage, qaAskPage, qaDetailPage } from './pages-qa.js';
+import { cheatsheetPage } from './pages-cheatsheet.js';
+import { toolboxPage } from './pages-toolbox.js';
+import { weeklyPage } from './pages-weekly.js';
 import { FLAGS } from './flags.js';
 import {
   expertListPage, expertDetailPage, expertApplyPage, expertWorkbenchPage,
@@ -84,6 +87,12 @@ const ROUTES = [
   { re: /^\/qa$/,                page: (ctx) => qaListPage(ctx) },
   { re: /^\/qa\/ask$/,            page: (ctx) => qaAskPage(ctx) },
   { re: /^\/qa\/([^/]+)$/,        page: (ctx, m) => qaDetailPage(ctx, decodeSegment(m[1])) },
+
+  // 效率三件套：纯前端页面，不依赖任何接口，游客可直接用。
+  // 无需登录不是因为偷懒——工具箱要贴令牌和 IP，数据出浏览器才是问题。
+  { re: /^\/cheatsheet$/,        page: (ctx) => cheatsheetPage(ctx) },
+  { re: /^\/toolbox$/,           page: (ctx) => toolboxPage(ctx) },
+  { re: /^\/weekly$/,            page: (ctx) => weeklyPage(ctx) },
 
   { re: /^\/me$/,                page: (ctx) => mePage(ctx) },
   { re: /^\/contribute$/,        page: (ctx) => contributePage(ctx) },
@@ -375,6 +384,29 @@ function renderNav(path) {
     href: '#/qa',
     active: path === '/qa' || path.startsWith('/qa/'),
   }));
+
+  // 效率三件套（FLAGS 单独开关）：日常高频入口，摆在内容栏目同排。
+  if (FEATURES.cheatsheet) {
+    items.push(navItemHTML({
+      name: '速查手册',
+      href: '#/cheatsheet',
+      active: path === '/cheatsheet',
+    }));
+  }
+  if (FEATURES.toolbox) {
+    items.push(navItemHTML({
+      name: '工具箱',
+      href: '#/toolbox',
+      active: path === '/toolbox',
+    }));
+  }
+  if (FEATURES.weekly) {
+    items.push(navItemHTML({
+      name: '周报生成',
+      href: '#/weekly',
+      active: path === '/weekly',
+    }));
+  }
 
   // 专家广场暂时收起入口（FLAGS.expertPlaza）。路由与详情页仍在：
   // 订单页、问答里的专家角标都还在往 #/experts/:id 跳，删路由会直接 404。

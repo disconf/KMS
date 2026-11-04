@@ -367,6 +367,41 @@ if (bookTarget) {
   check('教程集：有全部展开/收起开关', bookHtml.includes('data-book-expand'));
 }
 
+/* -------------------------------------------- 效率三件套（纯前端） -- */
+
+// 三个页面零接口依赖，渲染即可全量校验；数据断言挂模块导出的常量上，
+// 不依赖种子库，跑在哪套环境都一样。
+const csMod = await load('pages-cheatsheet.js');
+const tbMod = await load('pages-toolbox.js');
+const wkMod = await load('pages-weekly.js');
+
+const csHtml = await renderPage('速查手册', () => csMod.cheatsheetPage(ctx('')));
+check('速查手册：分类按钮与搜索框都在',
+  csHtml.includes('data-cs-cat="all"') && csHtml.includes('data-cs-search'));
+check('速查手册：条目带一键复制', csHtml.includes('data-copy="'));
+check('速查手册：命令量达标', csMod.CHEATSHEET_COUNT >= 100, `${csMod.CHEATSHEET_COUNT} 条`);
+
+const csFiltered = await renderPage('速查手册（按分类）', () => csMod.cheatsheetPage(ctx('c=kubectl')));
+check('速查手册：分类过滤后只剩该分类', csFiltered.includes('kubectl get pods') && !csFiltered.includes('mysqldump'));
+
+const tbHtml = await renderPage('工具箱（默认时间戳）', () => tbMod.toolboxPage(ctx('')));
+check('工具箱：八个工具导航齐全',
+  ['时间戳转换', 'Cron 解析', '编码转换', 'JWT 解码', '正则测试', 'JSON 格式化', '子网计算', '进制转换']
+    .every((s) => tbHtml.includes(s)));
+check('工具箱：默认面板是时间戳', tbHtml.includes('id="ts-in"') && !tbHtml.includes('id="cr-in"'));
+check('工具箱：明确承诺本地计算', tbHtml.includes('本地计算'));
+
+const tbCron = await renderPage('工具箱（cron 面板）', () => tbMod.toolboxPage(ctx('t=cron')));
+check('工具箱：切面板后旧面板不残留', tbCron.includes('id="cr-in"') && !tbCron.includes('id="ts-in"'));
+
+const wkHtml = await renderPage('周报生成器', () => wkMod.weeklyPage());
+check('周报生成器：五个分区齐全',
+  ['变更发布', '故障与处理', '巡检与告警', '优化与改进', '下周计划'].every((s) => wkHtml.includes(s)));
+check('周报生成器：复制与下载初始禁用（没有生成前不该能点）',
+  /data-wk="copy" disabled/.test(wkHtml) && /data-wk="download" disabled/.test(wkHtml));
+check('周报生成器：日期范围默认本周',
+  /id="wk-start" type="date" value="\d{4}-\d{2}-\d{2}"/.test(wkHtml));
+
 const quizHomeHtml = await renderPage('题库首页', () => quiz.quizHomePage(ctx()));
 check('题库首页：含练习入口', quizHomeHtml.includes('data-start'));
 
