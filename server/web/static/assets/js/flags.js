@@ -27,6 +27,16 @@ export const FLAGS = {
   cheatsheet: true,
   toolbox: true,
   weekly: true,
+
+  /**
+   * 模拟考与排障剧本（第二批）。
+   *
+   * 模拟考走题库的既有接口（抽题 + 交卷），后端零改动；入口在题库首页，
+   * 不占顶栏位置——它本质上是题库的一种用法，不是独立栏目。
+   * 排障剧本是纯前端内容页，给独立入口：线上出事时它要能被盲点开。
+   */
+  exam: true,
+  runbook: true,
 };
 
 /** 徽章门槛，必须与 service.BadgeOf 的阈值一致。 */

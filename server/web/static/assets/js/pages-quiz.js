@@ -5,6 +5,7 @@
 import { api, isLoggedIn, ApiError } from './api.js';
 import { esc, fmtNum, fmtDuration, fmtDate, icon, DIFFICULTY_LABEL, QUIZ_TYPE_LABEL } from './util.js';
 import { emptyHTML, toastError } from './ui.js';
+import { FLAGS } from './flags.js';
 
 /* ====================================================== 题库首页 ====== */
 
@@ -34,6 +35,17 @@ export async function quizHomePage(ctx) {
         因为现场少执行一步就是事故。</p>
     </div>
 
+    ${FLAGS.exam ? `<div class="exam-entry">
+      <div class="exam-entry-main">
+        <span class="exam-entry-ic">${icon('target', 19)}</span>
+        <div>
+          <strong>想验证真实水平？试试模拟考</strong>
+          <p>限时整卷、交卷才给答案，成绩单会按方向列出弱项，告诉你下一步补哪块。</p>
+        </div>
+      </div>
+      <a class="btn btn-primary" href="#/exam">去考试${icon('right', 14)}</a>
+    </div>` : ''}
+
     <div class="card card-pad" style="margin-bottom:24px">
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
         <div style="flex:1;min-width:220px">
@@ -41,8 +53,7 @@ export async function quizHomePage(ctx) {
           <p style="font-size:13px;color:var(--text-3)">
             随机抽题、逐题判分，答完给出成绩单与逐题解析。
           </p>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        </div>        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <div class="seg" role="group" aria-label="抽题数量" data-count-seg>
             ${[5, 10, 20].map((n) => `<button type="button" data-count="${n}"
               class="${n === 10 ? 'is-active' : ''}">${n} 题</button>`).join('')}

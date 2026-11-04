@@ -24,6 +24,8 @@ import { qaListPage, qaAskPage, qaDetailPage } from './pages-qa.js';
 import { cheatsheetPage } from './pages-cheatsheet.js';
 import { toolboxPage } from './pages-toolbox.js';
 import { weeklyPage } from './pages-weekly.js';
+import { examHomePage, examRunPage } from './pages-exam.js';
+import { runbookListPage, runbookDetailPage } from './pages-runbook.js';
 import { FLAGS } from './flags.js';
 import {
   expertListPage, expertDetailPage, expertApplyPage, expertWorkbenchPage,
@@ -93,6 +95,16 @@ const ROUTES = [
   { re: /^\/cheatsheet$/,        page: (ctx) => cheatsheetPage(ctx) },
   { re: /^\/toolbox$/,           page: (ctx) => toolboxPage(ctx) },
   { re: /^\/weekly$/,            page: (ctx) => weeklyPage(ctx) },
+
+  // 模拟考：/exam 选卷，/exam/run 答题。答题页靠 hash 上的 paper 参数抽题，
+  // 抽题结果不再随 hash 变化——所以考试过程中不跳路由，也就不会换卷。
+  { re: /^\/exam$/,              page: (ctx) => examHomePage(ctx) },
+  { re: /^\/exam\/run$/,         page: (ctx) => examRunPage(ctx) },
+
+  // 排障剧本：列表 + 单个剧本。剧本的当前步骤存在 ?p= 上（s1,s3,end-x），
+  // 这样刷新与分享链接都能回到同一条排查路径。
+  { re: /^\/runbook$/,           page: (ctx) => runbookListPage(ctx) },
+  { re: /^\/runbook\/([^/]+)$/,  page: (ctx, m) => runbookDetailPage(ctx, decodeSegment(m[1])) },
 
   { re: /^\/me$/,                page: (ctx) => mePage(ctx) },
   { re: /^\/contribute$/,        page: (ctx) => contributePage(ctx) },
@@ -391,6 +403,15 @@ function renderNav(path) {
       name: '速查手册',
       href: '#/cheatsheet',
       active: path === '/cheatsheet',
+    }));
+  }
+  // 排障剧本紧跟速查手册：两者的使用场景是连续的——先查命令，再按现象往下查。
+  // 模拟考不占导航位，入口在题库首页（它是题库的一种用法，不是独立栏目）。
+  if (FEATURES.runbook) {
+    items.push(navItemHTML({
+      name: '排障剧本',
+      href: '#/runbook',
+      active: path === '/runbook' || path.startsWith('/runbook/'),
     }));
   }
   if (FEATURES.toolbox) {

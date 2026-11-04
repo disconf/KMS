@@ -404,6 +404,7 @@ check('周报生成器：日期范围默认本周',
 
 const quizHomeHtml = await renderPage('题库首页', () => quiz.quizHomePage(ctx()));
 check('题库首页：含练习入口', quizHomeHtml.includes('data-start'));
+check('题库首页：含模拟考入口', quizHomeHtml.includes('#/exam') && quizHomeHtml.includes('exam-entry'));
 
 const quizPracticeHtml = await renderPage('练习页', () => quiz.quizPracticePage(ctx('count=3')));
 check('练习页：含作答容器与进度条',
@@ -413,6 +414,55 @@ check('练习页：含作答容器与进度条',
 const practiceData = await api.practice({ count: 3 });
 check('练习页：抽到题目', practiceData.list.length > 0, `${practiceData.list.length} 道`);
 check('练习页：题目含选项', (practiceData.list[0]?.options || []).length >= 2);
+
+/* --------------------------------------------- 模拟考 / 排障剧本 -- */
+
+const examMod = await load('pages-exam.js');
+const rbMod = await load('pages-runbook.js');
+const rbData = await load('runbook-data.js');
+
+// 模拟考首页不依赖登录态：卷型与规则对游客同样要说得清楚。
+const examHtml = await renderPage('模拟考首页', () => examMod.examHomePage(ctx('')));
+check('模拟考：三种卷型齐全',
+  ['快速测', '标准卷', '挑战卷'].every((s) => examHtml.includes(s)));
+check('模拟考：写明限时且交卷才给答案',
+  examHtml.includes('限时作答') && examHtml.includes('中途不给答案'));
+check('模拟考：卷型配额在服务端上限内',
+  examMod.EXAM_PAPERS.length === 3
+    && examMod.EXAM_PAPERS.every((p) => p.count >= 5 && p.count <= 50 && p.minutes >= 1),
+  examMod.EXAM_PAPERS.map((p) => `${p.count}题/${p.minutes}分`).join(' · '));
+
+// 未登录时不能抽题：既不泄露题目进度，也避免白打一次必然 401 的接口。
+const examRunHtml = await renderPage('模拟考（未登录）', () => examMod.examRunPage(ctx('paper=standard')));
+check('模拟考：未登录先给登录引导', examRunHtml.includes('登录后开始'));
+
+const rbHtml = await renderPage('排障剧本列表', () => rbMod.runbookListPage(ctx('')));
+check('排障剧本：场景数达标', rbData.RUNBOOK_COUNT >= 10, `${rbData.RUNBOOK_COUNT} 个`);
+check('排障剧本：卡片可点进详情', rbHtml.includes('#/runbook/crashloop'));
+
+// 分支跳转写错会让值班的人点进死胡同，这条断言守的就是数据完整性。
+let rbValid = 'ok';
+try { rbData.validateRunbooks(); } catch (e) { rbValid = e.message; }
+check('排障剧本：分支跳转全部有效', rbValid === 'ok', rbValid === 'ok' ? '' : rbValid);
+
+const rbSearch = await renderPage('排障剧本（搜索 OOM）', () => rbMod.runbookListPage(ctx('q=OOM')));
+check('排障剧本：搜索只留命中项',
+  rbSearch.includes('OOM Killer') && !rbSearch.includes('#/runbook/crashloop'));
+
+const rbStep = await renderPage('排障剧本（第一步）', () => rbMod.runbookDetailPage(ctx(''), 'crashloop'));
+check('排障剧本：第一步给出命令与多个分支',
+  rbStep.includes('data-copy=') && (rbStep.match(/data-branch=/g) || []).length >= 2);
+
+const rbTerm = await renderPage('排障剧本（结论节点）',
+  () => rbMod.runbookDetailPage(ctx('p=s1,end-oom'), 'crashloop'));
+check('排障剧本：结论页给根因、修复与验证',
+  rbTerm.includes('rb-terminal') && rbTerm.includes('根因')
+  && rbTerm.includes('怎么修') && rbTerm.includes('验证'));
+check('排障剧本：走过的路径可回退', rbTerm.includes('rb-trail') && rbTerm.includes('?p=s1'));
+
+const rbMissing = await renderPage('排障剧本（不存在的 slug）',
+  () => rbMod.runbookDetailPage(ctx(''), 'not-a-runbook'));
+check('排障剧本：未知剧本给引导不抛错', rbMissing.includes('没有这个剧本'));
 
 const resListHtml = await renderPage('资源列表', () => resources.resourceListPage(ctx()));
 check('资源列表：含文件类型筛选', resListHtml.includes('data-filter="fileExt"'));
