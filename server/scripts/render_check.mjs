@@ -181,6 +181,11 @@ check('问答详情：已发布回答带徽章', Boolean(qaTarget) && qaDetailHt
 // 汇总、分布、匿名脱敏、专家回复是这一页新引入的四类结构，逐个验。
 const expertDetailHtml = await renderPage('专家详情（含评价）', () => expertMod.expertDetailPage(ctx(), '1'));
 check('专家详情：含「服务评价」区块', expertDetailHtml.includes('服务评价'));
+// 人才名片（岗位对接一期）：详情接口带 contribution 块时渲染贡献条。
+// 有没有数据都该有这个条（种子专家通常有积分与回答），字段名照实断。
+check('专家详情：含社区贡献名片条与六项指标', expertDetailHtml.includes('talent-strip')
+  && expertDetailHtml.includes('贡献积分') && expertDetailHtml.includes('回答采纳率')
+  && expertDetailHtml.includes('文章阅读'));
 // 好评率的口径断言放在下面 reviewsSectionHTML 的桩数据上：真实库里没有评价时
 // 整个评价区走空态、连「好评率」三个字都不出现，这项就会假红（曾经把人的注意力
 // 从真问题上带走）。桩里 goodRate=85.7，展示必须是 86% 而不是 8570%。

@@ -115,17 +115,33 @@ type ExpertCard struct {
 	ServiceModes      []string          `json:"serviceModes"`
 }
 
+// ExpertContribution 人才名片上的社区贡献块（岗位对接一期）。
+//
+// 只给公开可算的数据：回答/采纳/文章/阅读/积分名次。点赞好友列表、
+// 被谁查看这类社交隐私数据不做——名片是给人看的，不是监控面板。
+type ExpertContribution struct {
+	Points          int64   `json:"points"`
+	Rank            int     `json:"rank"`
+	RankedUsers     int64   `json:"rankedUsers"`
+	Answers         int64   `json:"answers"`
+	AcceptedAnswers int64   `json:"acceptedAnswers"`
+	AdoptionRate    float64 `json:"adoptionRate"`
+	Articles        int64   `json:"articles"`
+	ArticleViews    int64   `json:"articleViews"`
+}
+
 // ExpertDetail 专家详情。
 // 刻意不含余额、累计收入等财务字段——那是只有本人能看的数据。
 type ExpertDetail struct {
 	ExpertCard
 
-	Intro          string     `json:"intro"`
-	Experience     string     `json:"experience"`
-	ResolveRate    float64    `json:"resolveRate"`
-	AvgResponseSec int64      `json:"avgResponseSec"`
-	AppliedAt      *time.Time `json:"appliedAt"`
-	JoinedAt       time.Time  `json:"joinedAt"`
+	Intro          string              `json:"intro"`
+	Experience     string              `json:"experience"`
+	ResolveRate    float64             `json:"resolveRate"`
+	AvgResponseSec int64               `json:"avgResponseSec"`
+	AppliedAt      *time.Time          `json:"appliedAt"`
+	JoinedAt       time.Time           `json:"joinedAt"`
+	Contribution   *ExpertContribution `json:"contribution,omitempty"`
 }
 
 // ============================ 公开评价 ============================

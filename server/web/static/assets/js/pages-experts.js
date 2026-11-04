@@ -23,6 +23,7 @@
 import { api, isLoggedIn, ApiError, uploadFile, refreshSession } from './api.js';
 import { FLAGS } from './flags.js';
 import { esc, fmtDate, fmtDateTime, fmtNum, icon, setHashQuery } from './util.js';
+import { badgeOf } from './flags.js';
 import { avatarHTML, bindPager, emptyHTML, pagerHTML, toastError, toastOk } from './ui.js';
 import { fmtCents } from './orders.js';
 
@@ -250,6 +251,38 @@ function recruitBannerHTML() {
 
 /* ==================================================== 专家详情 ====== */
 
+/**
+ * 社区贡献名片条（岗位对接一期）。
+ *
+ * 订单数据回答的是"他服务过多少人"，这里回答的是"他在社区里留下了什么"——
+ * 企业侧判断一个人靠不靠谱，真实痕迹比自述有用。任何一项为 0 都照实显示，
+ * 不藏零：一张全是整数的名片反而不可信。
+ */
+function contributionStripHTML(c) {
+  if (!c) return '';
+  const rankHTML = c.rank > 0
+    ? `<b>${fmtNum(c.rank)}</b><span>贡献榜名次</span>`
+    : `<b>—</b><span>贡献榜未上榜</span>`;
+  const adoption = c.answers > 0
+    ? `<b>${Math.round(Number(c.adoptionRate || 0))}%</b><span>回答采纳率</span>`
+    : `<b>—</b><span>回答采纳率</span>`;
+  return `
+    <section class="card card-pad talent-strip" style="margin-top:20px">
+      <div class="talent-strip-head">
+        <h2 class="block-title">社区贡献</h2>
+        <span class="talent-badge">${esc(badgeOf(c.points))}</span>
+      </div>
+      <div class="talent-strip-stats">
+        <span><b>${fmtNum(c.points)}</b><span>贡献积分</span></span>
+        ${rankHTML}
+        <span><b>${fmtNum(c.answers)}</b><span>广场回答</span></span>
+        ${adoption}
+        <span><b>${fmtNum(c.articles)}</b><span>发布文章</span></span>
+        <span><b>${fmtNum(c.articleViews)}</b><span>文章阅读</span></span>
+      </div>
+    </section>`;
+}
+
 export async function expertDetailPage(ctx, id) {
   let e;
   let rv = null;
@@ -311,6 +344,8 @@ export async function expertDetailPage(ctx, id) {
           : ''}
       </div>
     </section>
+
+    ${contributionStripHTML(e.contribution)}
 
     <div class="detail-layout" style="margin-top:20px">
       <div>

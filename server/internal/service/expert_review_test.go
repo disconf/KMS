@@ -85,6 +85,7 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 		experts, repository.NewSkillRepo(db), users, repository.NewOrderRepo(db),
 		repository.NewSettlementRepo(db), repository.NewWithdrawalRepo(db),
 		reviews, NewUploadService(store, "test-sign-secret", 20),
+		repository.NewTalentRepo(db, repository.NewPointRepo(db)),
 	)
 
 	return &reviewFixture{

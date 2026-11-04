@@ -46,6 +46,9 @@ type ExpertService struct {
 	withdrawals *repository.WithdrawalRepo
 	reviews     *repository.ReviewRepo
 	uploads     *UploadService
+	// talent 人才名片的社区贡献统计（岗位对接一期）。nil 时详情接口
+	// 自动省略 contribution 块，老调用方不受影响。
+	talent *repository.TalentRepo
 }
 
 // NewExpertService 创建 ExpertService。
@@ -58,11 +61,12 @@ func NewExpertService(
 	withdrawals *repository.WithdrawalRepo,
 	reviews *repository.ReviewRepo,
 	uploads *UploadService,
+	talent *repository.TalentRepo,
 ) *ExpertService {
 	return &ExpertService{
 		experts: experts, skills: skills, users: users,
 		orders: orders, settlements: settlements, withdrawals: withdrawals,
-		reviews: reviews, uploads: uploads,
+		reviews: reviews, uploads: uploads, talent: talent,
 	}
 }
 
@@ -278,7 +282,7 @@ func (s *ExpertService) ExpertDetail(ctx context.Context, id int64) (*dto.Expert
 		return nil, err
 	}
 	appliedAt := row.AppliedAt
-	return &dto.ExpertDetail{
+	detail := &dto.ExpertDetail{
 		ExpertCard:     buildExpertCard(row, skillRows),
 		Intro:          row.Intro,
 		Experience:     row.Experience,
@@ -286,7 +290,24 @@ func (s *ExpertService) ExpertDetail(ctx context.Context, id int64) (*dto.Expert
 		AvgResponseSec: row.AvgResponseSec,
 		AppliedAt:      &appliedAt,
 		JoinedAt:       row.CreatedAt,
-	}, nil
+	}
+	// 社区贡献是名片的加分项，不是必需项：统计查询挂了就让块缺省，
+	// 不能因为一个聚合查询把整张专家主页打成 500。
+	if s.talent != nil {
+		if tc, err := s.talent.ContributionOf(ctx, row.UserID); err == nil {
+			detail.Contribution = &dto.ExpertContribution{
+				Points:          tc.Points,
+				Rank:            tc.Rank,
+				RankedUsers:     tc.RankedUsers,
+				Answers:         tc.Answers,
+				AcceptedAnswers: tc.AcceptedAnswers,
+				AdoptionRate:    tc.AdoptionRate,
+				Articles:        tc.Articles,
+				ArticleViews:    tc.ArticleViews,
+			}
+		}
+	}
+	return detail, nil
 }
 
 // ReviewsOfExpert 查询专家主页的公开评价（含汇总与星级分布）。

@@ -158,9 +158,11 @@ func run() error {
 	articleSvc := service.NewArticleService(articleRepo, categoryRepo, userRepo, pointRepo)
 
 	uploadSvc := service.NewUploadService(store, cfg.FileSignSecret(), cfg.Storage.MaxSizeMB)
+	// pointRepo 已在上方创建（文章/问答共用），人才名片的榜单名次也用它。
+	talentRepo := repository.NewTalentRepo(db, pointRepo)
 	expertSvc := service.NewExpertService(
 		expertRepo, skillRepo, userRepo, orderRepo,
-		settlementRepo, withdrawalRepo, reviewRepo, uploadSvc,
+		settlementRepo, withdrawalRepo, reviewRepo, uploadSvc, talentRepo,
 	)
 
 	// 知识库各栏目。分类表被文章 / 工具 / 题库 / 资源四方共用，
