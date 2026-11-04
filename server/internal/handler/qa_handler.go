@@ -312,6 +312,29 @@ func (h *QaHandler) MyPoints(c *gin.Context) {
 	response.OK(c, resp)
 }
 
+// Leaderboard 贡献排行榜。
+//
+//	@Summary  贡献排行榜
+//	@Tags     qa
+//	@Produce  json
+//	@Param    limit query int false "条数，默认 20，上限 50"
+//	@Success  200 {object} response.Body
+//	@Router   /qa/leaderboard [get]
+func (h *QaHandler) Leaderboard(c *gin.Context) {
+	limit := 0
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	resp, err := h.qa.Leaderboard(c.Request.Context(), qaViewer(c), limit)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, resp)
+}
+
 // ============================ 后台 ============================
 
 // AdminPending 待审回答列表。

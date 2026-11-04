@@ -21,6 +21,9 @@ const (
 // 而用户看到的只有展示名。常量名同样保留，避免一次无意义的全局重命名。
 const (
 	ChannelLinuxTutorial = "linux-tutorial"
+	// ChannelOpsPostmortem 事故复盘。仍然落在文章表上，只是栏目不同：
+	// 复盘与教程的差别在写法（时间线 + 根因 + 预防），不在数据结构。
+	ChannelOpsPostmortem = "ops-postmortem"
 	ChannelOpsNews       = "ops-news"
 	ChannelOpenSource    = "open-source-tools"
 	ChannelOpsQuiz       = "ops-quiz"
@@ -53,6 +56,15 @@ var channels = []ChannelMeta{
 		Kind: ContentKindArticle,
 		Sort: 10,
 		Path: "/kb/linux-tutorial",
+	},
+	{
+		Slug: ChannelOpsPostmortem,
+		Name: "事故复盘",
+		Icon: "activity",
+		Desc: "真实故障的完整还原：现象、时间线、根因、修复与预防，别人的坑不必自己再踩一遍",
+		Kind: ContentKindArticle,
+		Sort: 15,
+		Path: "/kb/postmortem",
 	},
 	{
 		Slug: ChannelOpsQuiz,

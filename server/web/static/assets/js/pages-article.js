@@ -46,12 +46,15 @@ export async function articleListPage(ctx, channelSlug) {
   const list = result.list || [];
   const total = result.total || 0;
   const isNews = channelSlug === 'ops-news';
+  const isPostmortem = channelSlug === 'ops-postmortem';
 
   const html = `
     <div class="page-head">
       <h1>${esc(channel.name)}</h1>
       <p class="lede">${esc(channel.desc || '')}</p>
     </div>
+
+    ${isPostmortem ? postmortemBannerHTML() : ''}
 
     <div class="toolbar">
       <select class="select" data-filter="categoryId" aria-label="按分类筛选">
@@ -90,10 +93,14 @@ export async function articleListPage(ctx, channelSlug) {
               ? '换个关键词或清掉筛选条件再试试。'
               : isNews
                 ? '版本发布与安全公告会陆续出现在这里。'
-                : '教程正在整理中，稍后再来看看。',
+                : isPostmortem
+                  ? '还没有公开的复盘。第一场事故迟早会来，写下来就能让下一个人少熬一夜。'
+                  : '教程正在整理中，稍后再来看看。',
             actionHTML: (tag || keyword)
               ? `<button class="btn btn-sm" type="button" data-act="clear-all">清空筛选</button>`
-              : '',
+              : isPostmortem
+                ? `<a class="btn btn-sm" href="#/contribute?channel=ops-postmortem">写第一篇复盘</a>`
+                : '',
           })}
     </div>
 
@@ -272,5 +279,22 @@ function sourceNoticeHTML(item) {
   return `<div class="source-notice">
     ${icon('info', 14)}
     <span>${lead}${link}</span>
+  </div>`;
+}
+
+/**
+ * 复盘栏目的写作引导条。
+ *
+ * 只在这一栏出现：教程读者要的是"怎么做"，复盘读者要的是"为什么"，
+ * 两种内容的读法不同，把模板提示塞进所有栏目只会变成噪音。
+ */
+function postmortemBannerHTML() {
+  return `<div class="pm-banner">
+    <span class="pm-banner-ic">${icon('activity', 18)}</span>
+    <div class="pm-banner-main">
+      <strong>好复盘回答「为什么会发生」，不只是「哪里坏了」</strong>
+      <p>按「现象 → 时间线 → 根因 → 修复 → 改进」写下来。模板已经备好，点进去就能套用。</p>
+    </div>
+    <a class="btn btn-sm" href="#/contribute?channel=ops-postmortem">写一篇复盘</a>
   </div>`;
 }

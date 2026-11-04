@@ -75,6 +75,7 @@ export async function qaListPage(ctx) {
           <span><b>${fmtNum((stats && stats.answers) || 0)}</b>条回答</span>
         </div>
         <a class="btn btn-primary btn-lg qa-hero-ask" href="#/qa/ask">${icon('plus', 15)} 我要提问</a>
+        <a class="btn btn-lg qa-hero-rank" href="#/growth" title="看看谁在贡献">${icon('flame', 15)} 贡献榜</a>
       </section>
 
       <div class="qa-toolbar">

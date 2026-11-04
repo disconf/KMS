@@ -225,7 +225,7 @@ export function icon(name, size = 16, extraClass = '') {
 
 /** 栏目图标名到本地图标集的映射。服务端给的是语义名，前端负责落地成图形。 */
 export function channelIcon(name) {
-  const map = { terminal: 'terminal', quiz: 'quiz', news: 'news', tools: 'tools', download: 'download' };
+  const map = { terminal: 'terminal', quiz: 'quiz', news: 'news', tools: 'tools', download: 'download', activity: 'activity' };
   return icon(map[name] || 'layers');
 }
 

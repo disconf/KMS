@@ -691,6 +691,55 @@ func (s *QaService) MyPoints(ctx context.Context, viewer QaViewer) (*dto.MyPoint
 	return resp, nil
 }
 
+// LeaderboardLimit 榜单默认条数。
+//
+// 20 条是"一屏能读完且值得争的名次"的折中：再多，第 40 名对读者
+// 没有信息量，对当事人也没有激励；再少，新用户永远上不了榜。
+const LeaderboardLimit = 20
+
+// Leaderboard 贡献排行榜。
+//
+// 游客可读：公开榜单本身就是"来这个站能获得什么"的展示面，
+// 登录后才额外带上"我的名次"。名次与榜单在同一时刻查，
+// 不是两次快照拼接——否则并发加分时会算出"榜上没我但我排第 3"。
+func (s *QaService) Leaderboard(ctx context.Context, viewer QaViewer, limit int) (*dto.LeaderboardResp, error) {
+	if limit <= 0 || limit > 50 {
+		limit = LeaderboardLimit
+	}
+	rows, err := s.points.Leaderboard(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	total, err := s.points.RankedCount(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &dto.LeaderboardResp{
+		Items: make([]dto.LeaderboardItem, 0, len(rows)),
+		Total: total,
+	}
+	for i, r := range rows {
+		resp.Items = append(resp.Items, dto.LeaderboardItem{
+			Rank:     i + 1,
+			UserID:   r.UserID,
+			Nickname: r.Nickname,
+			Avatar:   r.Avatar,
+			Role:     r.Role,
+			Badge:    BadgeOf(r.Points),
+			Points:   r.Points,
+		})
+	}
+	if viewer.LoggedIn() {
+		rank, points, err := s.points.RankOf(ctx, viewer.UserID)
+		if err != nil {
+			return nil, err
+		}
+		resp.MyRank, resp.MyPoints = rank, points
+	}
+	return resp, nil
+}
+
 /* ============================ 纯函数 ============================ */
 
 // 徽章门槛。数组有序，BadgeOf 取最后一个满足的等级。

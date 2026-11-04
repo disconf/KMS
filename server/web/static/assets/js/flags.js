@@ -37,6 +37,12 @@ export const FLAGS = {
    */
   exam: true,
   runbook: true,
+
+  /**
+   * 成长中心（第三批）：等级徽章 + 贡献排行榜。游客可读榜单，
+   * 登录后额外显示"我的名次"与积分流水。入口在个人中心与问答广场。
+   */
+  growth: true,
 };
 
 /** 徽章门槛，必须与 service.BadgeOf 的阈值一致。 */

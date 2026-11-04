@@ -171,3 +171,28 @@ type MyPointsResp struct {
 	NextAt    int64          `json:"nextAt,omitempty"`
 	Recent    []PointLogItem `json:"recent"`
 }
+
+// LeaderboardItem 排行榜一行。
+//
+// 只暴露昵称、头像、角色与积分：邮箱手机号属于隐私，一个公开排行榜
+// 不该把这些带出去。UserID 保留是给前端点进"TA 的主页"用的。
+type LeaderboardItem struct {
+	Rank     int    `json:"rank"`
+	UserID   int64  `json:"userId"`
+	Nickname string `json:"nickname"`
+	Avatar   string `json:"avatar"`
+	Role     string `json:"role"`
+	Badge    string `json:"badge"`
+	Points   int64  `json:"points"`
+}
+
+// LeaderboardResp 贡献排行榜。
+//
+// MyRank 为 0 表示未上榜（未登录、积分为 0 或被封禁），前端据此
+// 决定是否显示"我的名次"卡片——显示 0 名比不显示更让人困惑。
+type LeaderboardResp struct {
+	Items    []LeaderboardItem `json:"items"`
+	Total    int64             `json:"total"`
+	MyRank   int               `json:"myRank"`
+	MyPoints int64             `json:"myPoints"`
+}

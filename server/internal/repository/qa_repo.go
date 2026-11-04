@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -534,4 +535,89 @@ func (r *PointRepo) RecentOf(ctx context.Context, userID int64, limit int) ([]mo
 		return nil, errcode.ErrDatabase.Wrap(fmt.Errorf("查询积分流水失败: %w", err))
 	}
 	return items, nil
+}
+
+// LeaderboardRow 排行榜查询行。
+//
+// 单独定义一个行结构而不是直接返回 model.User：User 里有手机号、
+// 邮箱、发言申请备注等一串隐私字段，把它们查出来再靠 DTO 挡，
+// 早晚有人往 JSON 里加字段时顺手泄露。这里只 Select 四列。
+type LeaderboardRow struct {
+	UserID   int64  `gorm:"column:user_id"`
+	Nickname string `gorm:"column:nickname"`
+	Avatar   string `gorm:"column:avatar"`
+	Role     string `gorm:"column:role"`
+	Points   int64  `gorm:"column:points"`
+}
+
+// 榜单口径：只算正常状态且积分大于 0 的用户。
+//
+// 封禁用户保留积分但不上榜——否则"被封的人挂在贡献榜第三"很难看，
+// 也等于用榜单给违规账号做背书。积分为 0 的人同样不占位：
+// 新注册用户全在榜尾排一百名，榜就没有意义了。
+const leaderboardWhere = "status = ? AND contribution_points > 0"
+
+// Leaderboard 取贡献榜前 limit 名。
+//
+// 同分时按 id 升序：注册早的在前。不加这个次级排序，
+// 同分用户的相对位置在两次查询间可能抖动，前端每次刷新都在换位。
+func (r *PointRepo) Leaderboard(ctx context.Context, limit int) ([]LeaderboardRow, error) {
+	rows := make([]LeaderboardRow, 0, limit)
+	err := r.db.WithContext(ctx).Model(&model.User{}).
+		Select("id AS user_id, nickname, avatar, role, contribution_points AS points").
+		Where(leaderboardWhere, model.UserStatusActive).
+		Order("contribution_points DESC, id ASC").
+		Limit(limit).Scan(&rows).Error
+	if err != nil {
+		return nil, errcode.ErrDatabase.Wrap(fmt.Errorf("查询贡献榜失败: %w", err))
+	}
+	return rows, nil
+}
+
+// RankedCount 统计榜上人数（榜单分母）。
+func (r *PointRepo) RankedCount(ctx context.Context) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.User{}).
+		Where(leaderboardWhere, model.UserStatusActive).Count(&n).Error
+	if err != nil {
+		return 0, errcode.ErrDatabase.Wrap(fmt.Errorf("统计贡献榜人数失败: %w", err))
+	}
+	return n, nil
+}
+
+// RankOf 取某个用户在榜上的名次与积分。
+//
+// 名次用"比我高的人数 + 1"算，规则必须与 Leaderboard 的排序逐字一致：
+// 分数更高的人，加上同分但 id 更小的人。两处不一致会让用户看到
+// 榜单上第 7 名，自己的卡片写着第 8 名。
+//
+// 返回 rank=0 表示未上榜——未激活、被封禁或积分还没攒到 1 分。
+func (r *PointRepo) RankOf(ctx context.Context, userID int64) (int, int64, error) {
+	var me struct {
+		ID     int64  `gorm:"column:id"`
+		Status string `gorm:"column:status"`
+		Points int64  `gorm:"column:contribution_points"`
+	}
+	err := r.db.WithContext(ctx).Model(&model.User{}).
+		Select("id, status, contribution_points").
+		Where("id = ?", userID).Take(&me).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, 0, nil
+		}
+		return 0, 0, errcode.ErrDatabase.Wrap(fmt.Errorf("查询我的名次失败: %w", err))
+	}
+	if me.Status != model.UserStatusActive || me.Points <= 0 {
+		return 0, me.Points, nil
+	}
+
+	var ahead int64
+	err = r.db.WithContext(ctx).Model(&model.User{}).
+		Where("status = ? AND (contribution_points > ? OR (contribution_points = ? AND id < ?))",
+			model.UserStatusActive, me.Points, me.Points, me.ID).
+		Count(&ahead).Error
+	if err != nil {
+		return 0, me.Points, errcode.ErrDatabase.Wrap(fmt.Errorf("统计我的名次失败: %w", err))
+	}
+	return int(ahead) + 1, me.Points, nil
 }

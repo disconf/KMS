@@ -213,11 +213,14 @@ type articleSeed struct {
 	Title        string
 	Slug         string
 	CategorySlug string
-	Summary      string
-	Content      string
-	Tags         []string
-	ViewCount    int64
-	LikeCount    int64
+	// Channel 归属栏目。空表示教程栏目（表默认值），
+	// 事故复盘等新栏目必须显式写，否则会全部落进教程列表。
+	Channel   string
+	Summary   string
+	Content   string
+	Tags      []string
+	ViewCount int64
+	LikeCount int64
 }
 
 var articleSeeds = []articleSeed{
@@ -317,10 +320,13 @@ func seedArticles(ctx context.Context, db *gorm.DB) error {
 
 	// 工具教程集的站内正文（seed_tool_articles.go）与示例文章走同一条写入路径：
 	// 同样按 slug 幂等、同样发布态、同样挂管理员名下。
+	// 事故复盘的示例正文在 seed_postmortem.go，走的是同一条路径。
 	toolArticles := toolArticleSeeds()
-	all := make([]articleSeed, 0, len(articleSeeds)+len(toolArticles))
+	postmortems := postmortemArticleSeeds()
+	all := make([]articleSeed, 0, len(articleSeeds)+len(toolArticles)+len(postmortems))
 	all = append(all, articleSeeds...)
 	all = append(all, toolArticles...)
+	all = append(all, postmortems...)
 
 	for _, a := range all {
 		var existing model.Article
@@ -339,9 +345,17 @@ func seedArticles(ctx context.Context, db *gorm.DB) error {
 		}
 
 		now := time.Now()
+		// 栏目空值走表默认（教程）。不能直接把空串写进去——
+		// gorm 的 default 标签对这个字段生效，但显式赋值会覆盖默认，
+		// 结果是一批 channel='' 的文章既不在教程也不在任何栏目里。
+		channel := a.Channel
+		if channel == "" {
+			channel = model.ChannelLinuxTutorial
+		}
 		item := model.Article{
 			Title:          a.Title,
 			Slug:           a.Slug,
+			Channel:        channel,
 			Summary:        a.Summary,
 			Content:        a.Content,
 			CategoryID:     categoryID,

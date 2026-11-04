@@ -447,6 +447,7 @@ export const api = {
   likeAnswer:     (id) => post(`/qa/answers/${encodeURIComponent(id)}/like`),
   unlikeAnswer:   (id) => del(`/qa/answers/${encodeURIComponent(id)}/like`),
   myPoints:       () => get('/qa/my/points'),
+  leaderboard:    (limit) => get('/qa/leaderboard' + qs({ limit })),
 
   /* 开源工具 */
   tools:       (query) => get('/tools' + qs(query)),

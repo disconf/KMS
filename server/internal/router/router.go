@@ -336,6 +336,9 @@ func registerQaRoutes(g *gin.RouterGroup, opt Options) {
 	guest := g.Group("/qa", middleware.OptionalAuth(opt.JWT, opt.Tokens))
 	guest.GET("/questions", h.List)
 	guest.GET("/questions/:id", h.Detail)
+	// 贡献榜游客可读：它是"这个站能获得什么"的展示面，
+	// 登录后同一次请求会额外带回我的名次，不需要单独再调一次。
+	guest.GET("/leaderboard", h.Leaderboard)
 
 	authed := g.Group("/qa", opt.authMW())
 	authed.POST("/questions", h.Ask)

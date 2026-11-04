@@ -24,6 +24,7 @@ import { qaListPage, qaAskPage, qaDetailPage } from './pages-qa.js';
 import { cheatsheetPage } from './pages-cheatsheet.js';
 import { toolboxPage } from './pages-toolbox.js';
 import { weeklyPage } from './pages-weekly.js';
+import { growthPage } from './pages-growth.js';
 import { examHomePage, examRunPage } from './pages-exam.js';
 import { runbookListPage, runbookDetailPage } from './pages-runbook.js';
 import { FLAGS } from './flags.js';
@@ -105,6 +106,10 @@ const ROUTES = [
   // 这样刷新与分享链接都能回到同一条排查路径。
   { re: /^\/runbook$/,           page: (ctx) => runbookListPage(ctx) },
   { re: /^\/runbook\/([^/]+)$/,  page: (ctx, m) => runbookDetailPage(ctx, decodeSegment(m[1])) },
+
+  // 成长中心：等级徽章 + 贡献榜。游客可读（榜单是公开的），
+  // 只是没有"我的名次"与流水——页面自己处理未登录形态。
+  { re: /^\/growth$/,            page: (ctx) => growthPage(ctx) },
 
   { re: /^\/me$/,                page: (ctx) => mePage(ctx) },
   { re: /^\/contribute$/,        page: (ctx) => contributePage(ctx) },
@@ -281,12 +286,13 @@ function bindGlobalEvents() {
     if (act === 'home') location.hash = '#/';
   });
 
-  // 空态里的"去登录"按钮
+  // 空态里的"去登录 / 去注册"按钮。
+  // 顶栏账号区之外的地方（空态、成长中心、需要登录的页面）都走这里，
+  // 两种按钮一起接：只接 login 会让"注册账号"点下去毫无反应。
   document.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-act="login"]');
-    if (btn && !btn.closest('#account')) {
-      openLoginModal();
-    }
+    const btn = e.target.closest('[data-act="login"], [data-act="register"]');
+    if (!btn || btn.closest('#account')) return;
+    openLoginModal(btn.getAttribute('data-act') === 'register' ? 'register' : undefined);
   });
 
   // 顶部导航是横向滚动的，点完一项顺手把搜索面板收掉
@@ -655,10 +661,10 @@ function renderAccount() {
     ? `<a class="btn btn-sm admin-entry" href="#/expert" title="专家工作台">${icon('activity', 14)}工作台</a>`
     : '';
   box.innerHTML = `
-    <div class="user-chip" title="${esc(user.email || user.phone || '')}">
+    <a class="user-chip" href="#/me" title="${esc(user.email || user.phone || '')} · 我的账号">
       <span class="avatar">${esc(String(name)[0].toUpperCase())}</span>
       <span class="name">${esc(name)}</span>
-    </div>
+    </a>
     ${expertEntry}
     ${adminEntry}
     ${pwdEntry}

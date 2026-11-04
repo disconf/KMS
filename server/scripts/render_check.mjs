@@ -464,6 +464,42 @@ const rbMissing = await renderPage('排障剧本（不存在的 slug）',
   () => rbMod.runbookDetailPage(ctx(''), 'not-a-runbook'));
 check('排障剧本：未知剧本给引导不抛错', rbMissing.includes('没有这个剧本'));
 
+/* ------------------------------------------------ 成长中心 / 事故复盘 -- */
+
+const growthMod = await load('pages-growth.js');
+
+// 这一节跑在"临时账号登录"之前，正好是游客视角：榜单公开可读，
+// 但我的名次与流水不该出现——未登录的人没有名次。
+const growthGuest = await renderPage('成长中心（游客）', () => growthMod.growthPage(ctx('')));
+check('成长中心：四个等级都摆出来', growthGuest.includes('四个等级')
+  && ['新手', '活跃', '贡献者', '资深贡献者'].every((s) => growthGuest.includes(s)));
+check('成长中心：积分规则四条齐全',
+  ['回答被采纳', '回答被点赞', '实战教程过审', '题目过审入库'].every((s) => growthGuest.includes(s)));
+check('成长中心：游客看得到榜单但看不到我的流水',
+  growthGuest.includes('贡献排行榜') && !growthGuest.includes('我的积分流水'));
+check('成长中心：未登录给登录引导', growthGuest.includes('登录后查看你的等级'));
+check('成长中心：说明积分不兑换权益（不做虚假承诺）',
+  growthGuest.includes('不兑换权益'));
+
+// 复盘栏目：引导条只在复盘栏目出现，教程栏目不该被塞进来。
+const pmListHtml = await renderPage('事故复盘栏目', () => article.articleListPage(ctx(), 'ops-postmortem'));
+check('事故复盘：写作引导条只在复盘栏目出现',
+  pmListHtml.includes('pm-banner') && pmListHtml.includes('好复盘回答'));
+check('事故复盘：引导条直达带栏目预选的投稿页',
+  pmListHtml.includes('#/contribute?channel=ops-postmortem'));
+check('事故复盘：教程栏目没有复盘引导条',
+  !(await renderPage('教程栏目页（复查）', () => article.articleListPage(ctx(), 'linux-tutorial')))
+    .includes('pm-banner'));
+
+const pmPosts = await api.articles({ channel: 'ops-postmortem', pageSize: 10 }).catch(() => ({ total: 0, list: [] }));
+check('事故复盘：示例复盘已入库', (pmPosts.total || 0) >= 3, `${pmPosts.total || 0} 篇`);
+const pmFirst = (pmPosts.list || [])[0];
+
+const pmDetail = await renderPage('事故复盘详情',
+  () => article.articleDetailPage(ctx(), pmFirst ? pmFirst.slug : 'not-exist'));
+check('事故复盘：详情页渲染出时间线与改进项',
+  pmDetail.includes('时间线') && pmDetail.includes('改进项'));
+
 const resListHtml = await renderPage('资源列表', () => resources.resourceListPage(ctx()));
 check('资源列表：含文件类型筛选', resListHtml.includes('data-filter="fileExt"'));
 
@@ -720,6 +756,13 @@ if (loggedIn && speakGranted) {
   const meHtml = await renderPage('我的（登录态）', () => meMod.mePage(ctx()));
   check('我的：显示发言权限状态', meHtml.includes('发言权限') && meHtml.includes('可发言'));
   check('我的：资料区渲染出来', meHtml.includes('me-rows') && meHtml.includes('me-card'));
+  check('我的：成长卡给出等级、积分与上榜情况', meHtml.includes('me-growth') && meHtml.includes('成长中心'));
+
+  // 登录后的成长中心：进度条与名次区要出现——哪怕积分还是 0，
+  // 也要显示"未上榜"，比空着一块让人困惑的空白好。
+  const growthMe = await renderPage('成长中心（登录）', () => growthMod.growthPage(ctx()));
+  check('成长中心：登录后显示等级进度与名次区',
+    growthMe.includes('aria-label="等级进度"') && growthMe.includes('未上榜'));
 }
 
 if (loggedIn && speakGranted) {

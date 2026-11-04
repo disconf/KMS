@@ -30,6 +30,59 @@ const TITLE_MAX = 200;
 const CONTENT_MIN = 50;
 const CONTENT_MAX = 50000;
 
+// 事故复盘栏目专用的写作骨架。
+//
+// 复盘最常写坏的两种样子：只写「排查过程」写成流水账，或者结论只有
+// 「重启后恢复」。这个模板把「根因」和「改进项」摆成必填位置，
+// 是为了让人回答"为什么会发生"和"下次怎么不重演"。
+// 用数组 join 而不是模板字符串：正文里本来就有 ``` 代码块，
+// 套在反引号字符串里要转义得满屏反斜杠。
+const POSTMORTEM_CHANNEL = 'ops-postmortem';
+const POSTMORTEM_TEMPLATE = [
+  '## 一句话结论',
+  '',
+  '什么坏了、为什么坏、影响多大，一句话说清。',
+  '',
+  '## 影响范围',
+  '',
+  '- 受影响业务：',
+  '- 起止时间：',
+  '- 影响面（用户数 / 请求量 / 资损）：',
+  '',
+  '## 时间线',
+  '',
+  '| 时间 | 发生了什么 | 谁在处理 |',
+  '| --- | --- | --- |',
+  '| 10:02 | 监控告警：订单接口 P99 从 180ms 涨到 4.2s | 值班同学 |',
+  '| 10:05 | 确认连接池打满，排除应用侧发布 | |',
+  '',
+  '## 排查过程',
+  '',
+  '写清每一步「查了什么、看到什么、排除了什么」，不要只贴最后那条命令。',
+  '',
+  '```bash',
+  '# 关键命令与输出',
+  '```',
+  '',
+  '## 根因',
+  '',
+  '- 直接原因：',
+  '- 深层原因（为什么它会存在）：',
+  '- 为什么没早发现：',
+  '',
+  '## 修复与恢复',
+  '',
+  '1. ',
+  '',
+  '验证方式（怎么确认真的恢复了，而不只是负载降下去了）：',
+  '',
+  '## 改进项',
+  '',
+  '| 改进 | 类型 | 负责人 | 期限 |',
+  '| --- | --- | --- | --- |',
+  '|  | 代码 / 监控 / 流程 |  |  |',
+].join('\n');
+
 // 选项标识。题库用字母做 key（后端 normalizeOptionKey 也只认单字母），
 // 下标即 key，所以最多 8 个选项。
 const OPTION_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
@@ -80,7 +133,7 @@ export async function contributePage(ctx) {
     // 开放投稿等于任何人都能往「行业动态」里塞软文（服务端也会再拒一次）。
     const channels = await api.channels().catch(() => []);
     const writable = channels.filter((c) => c.kind === 'article' && c.slug !== 'ops-news');
-    formHTML = articleFormHTML(writable, categories);
+    formHTML = articleFormHTML(writable, categories, ctx.params.get('channel') || '');
     asideHTML = articleAsideHTML();
   } else {
     formHTML = quizFormHTML(categories);
@@ -119,13 +172,16 @@ export async function contributePage(ctx) {
 
 /* ------------------------------------------------------- 教程表单 -- */
 
-function articleFormHTML(writable, categories) {
+function articleFormHTML(writable, categories, presetChannel = '') {
+  // 从「事故复盘」等栏目的引导条点进来时带 ?channel=xxx，
+  // 让下拉直接落在那栏——否则用户还得自己再选一次，选错就投错栏目。
+  const selected = writable.some((c) => c.slug === presetChannel) ? presetChannel : '';
   return `
     <form class="card card-pad" id="c-form" novalidate>
       <div class="field" style="margin-bottom:18px">
         <label for="c-title">标题 <span class="hint">${TITLE_MIN}–${TITLE_MAX} 字</span></label>
         <input class="input" id="c-title" maxlength="${TITLE_MAX}"
-               placeholder="例如：Nginx 502 排查：后端 keepalive 超时导致连接被复用" />
+               placeholder="例如：一条慢查询拖垮整个订单库：从发现到恢复的 47 分钟" />
       </div>
 
       <div class="form-row">
@@ -133,7 +189,7 @@ function articleFormHTML(writable, categories) {
           <label for="c-channel">投稿栏目</label>
           <select class="select" id="c-channel">
             ${writable.length
-              ? writable.map((c) => `<option value="${esc(c.slug)}">${esc(c.name)}</option>`).join('')
+              ? writable.map((c) => `<option value="${esc(c.slug)}"${c.slug === selected ? ' selected' : ''}>${esc(c.name)}</option>`).join('')
               : '<option value="linux-tutorial">运维实战教程</option>'}
           </select>
         </div>
@@ -153,7 +209,10 @@ function articleFormHTML(writable, categories) {
       </div>
 
       <div class="field" style="margin-bottom:18px">
-        <label for="c-content">正文 <span class="hint">至少 ${CONTENT_MIN} 字，支持 Markdown</span></label>
+        <div class="label-row">
+          <label for="c-content">正文 <span class="hint">至少 ${CONTENT_MIN} 字，支持 Markdown</span></label>
+          <button class="btn btn-sm" type="button" id="c-tpl" hidden>${icon('list', 13)} 套用复盘模板</button>
+        </div>
         <textarea class="input code-input" id="c-content" rows="18" maxlength="${CONTENT_MAX}"
           placeholder="## 现象&#10;&#10;## 排查过程&#10;&#10;## 根因&#10;&#10;## 修复步骤&#10;&#10;## 如何验证"></textarea>
       </div>
@@ -208,6 +267,21 @@ function mountArticleForm(root) {
 
   // 正文支持粘贴 / 拖入图片，落库是标准 Markdown 图片语法。
   enableMarkdownImages(root, contentEl);
+
+  // 复盘模板按钮：只在这一栏出现。模板是一副骨架，不是正文——
+  // 填完骨架还得写自己的事，所以不做"一键生成一篇复盘"。
+  const tplBtn = root.querySelector('#c-tpl');
+  const syncTpl = () => { tplBtn.hidden = channelEl.value !== POSTMORTEM_CHANNEL; };
+  channelEl.addEventListener('change', syncTpl);
+  syncTpl();
+  tplBtn.addEventListener('click', () => {
+    if (contentEl.value.trim() && !window.confirm('正文已有内容，套用模板会覆盖。确认覆盖？')) return;
+    contentEl.value = POSTMORTEM_TEMPLATE;
+    contentEl.focus();
+    // 手动触发 input，让"还差多少字"的计数跟着更新
+    contentEl.dispatchEvent(new Event('input'));
+    toastOk('模板已填入，替换成你的真实经历即可');
+  });
 
   const refresh = () => {
     const t = titleEl.value.trim().length;

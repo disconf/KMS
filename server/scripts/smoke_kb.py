@@ -242,8 +242,10 @@ print("--- 5. 栏目导航 ---")
 _, p = call("GET", "/channels", expect=200)
 channels = p["data"]["list"]
 print("     栏目:", [(c["slug"], c["kind"], c["count"]) for c in channels])
+# 清单跟着 model.channels 的注册表走：加栏目必须同步这里，
+# 顺序即导航顺序（postmortem 排在教程之后、题库之前）。
 results.append([c["slug"] for c in channels] == [
-    "linux-tutorial", "ops-quiz", "ops-news", "open-source-tools", "resources",
+    "linux-tutorial", "ops-postmortem", "ops-quiz", "ops-news", "open-source-tools", "resources",
 ])
 results.append(all(c["kind"] in ("article", "quiz", "tool", "resource") for c in channels))
 results.append(all(c["count"] >= 0 for c in channels))

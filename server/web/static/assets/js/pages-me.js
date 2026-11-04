@@ -6,8 +6,9 @@
  * 能说明"为什么"和"多久能通过"的落点。弹窗只够提示，不够解释。
  */
 import { api, currentUser, isLoggedIn, refreshProfile } from './api.js';
+import { BADGE_LEVELS, badgeOf } from './flags.js';
 import { emptyHTML, toastError, toastOk } from './ui.js';
-import { esc, fmtDate, icon } from './util.js';
+import { esc, fmtDate, fmtNum, icon } from './util.js';
 
 const SPEAK_META = {
   none: { label: '只读', tone: 'warn', desc: '可以浏览全部内容，不能提问、回答、评论或投稿。' },
@@ -46,13 +47,53 @@ export async function mePage() {
     // 刷新失败就用本地会话里的资料，至少页面还能渲染出来。
   }
 
-  const state = await safeSpeakState();
+  const [state, growth] = await Promise.all([safeSpeakState(), safeGrowth()]);
   return {
     title: '我的账号',
-    html: pageHead('我的账号', '账号资料与发言权限。')
-      + `<div class="me-page">${profileCard(user)}${speakCard(state, user)}</div>`,
+    html: pageHead('我的账号', '账号资料、成长等级与发言权限。')
+      + `<div class="me-page">${profileCard(user)}${growthCardHTML(growth)}${speakCard(state, user)}</div>`,
     mount: (root) => bindApply(root, state),
   };
+}
+
+/**
+ * 成长数据：积分与名次。
+ *
+ * 两件事都失败时整张卡不显示——比显示一个"0 分 · 未上榜"的假象好：
+ * 用户会以为自己的分被清零了。名次只取 1 条榜单，接口照样返回
+ * myRank 与 total，省一次全量查询。
+ */
+async function safeGrowth() {
+  try {
+    const [mine, board] = await Promise.all([
+      api.myPoints(),
+      api.leaderboard(1).catch(() => null),
+    ]);
+    if (!mine) return null;
+    return { mine, board };
+  } catch {
+    return null;
+  }
+}
+
+function growthCardHTML(growth) {
+  if (!growth) return '';
+  const { mine, board } = growth;
+  const badge = mine.badge || badgeOf(mine.points);
+  const next = BADGE_LEVELS.find((b) => b.at > mine.points);
+  const rank = board && board.myRank > 0 ? `贡献榜第 ${fmtNum(board.myRank)} 名` : '还没上榜';
+  const sub = next
+    ? `再得 ${fmtNum(next.at - mine.points)} 分升到「${esc(next.label)}」`
+    : '已是最高等级';
+
+  return `<a class="card me-growth" href="#/growth">
+    <span class="me-growth-ic">${icon('flame', 20)}</span>
+    <span class="me-growth-main">
+      <span class="me-growth-title">${esc(badge)} · ${fmtNum(mine.points)} 分</span>
+      <span class="me-growth-sub">${esc(sub)} · ${esc(rank)}</span>
+    </span>
+    <span class="me-growth-go">成长中心${icon('right', 14)}</span>
+  </a>`;
 }
 
 /** 拉取发言状态，失败时降级成"未知但按只读处理"。 */
